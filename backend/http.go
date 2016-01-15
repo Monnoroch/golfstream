@@ -167,7 +167,8 @@ func (self *httpBackend) Config() (interface{}, error) {
 	}
 
 	return map[string]interface{}{
-		"type": "http",
+		"type":   "http",
+		"remote": true,
 		"arg": map[string]interface{}{
 			"url":  self.baseUrl,
 			"base": res.Cfg,

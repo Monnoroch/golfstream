@@ -315,8 +315,41 @@ func (self *remoteService) getBackend(back string) *remoteServiceBackend {
 	return res
 }
 
+func getBaseConfig(cfg interface{}) (interface{}, error) {
+	c, ok := cfg.(map[string]interface{})
+	if !ok {
+		return nil, errors.New(fmt.Sprintf("getBaseConfig: Expected map[string]interface{}, got %v", cfg))
+	}
+
+	if _, ok := c["remote"]; !ok {
+		return cfg, nil
+	}
+
+	a, ok := c["arg"]
+	if !ok {
+		return nil, errors.New(fmt.Sprintf("getBaseConfig: Expected config to have field \"arg\", got %v", cfg))
+	}
+
+	aa, ok := a.(map[string]interface{})
+	if !ok {
+		return nil, errors.New(fmt.Sprintf("getBaseConfig: Expected config.arg to have field \"arg\" of map[string]interface{}, got %v", a))
+	}
+
+	base, ok := aa["base"]
+	if !ok {
+		return nil, errors.New(fmt.Sprintf("getBaseConfig: Expected config.arg to have field \"base\", got %v", a))
+	}
+
+	return base, nil
+}
+
 func (self *remoteService) AddBackend(back string, b backend.Backend) (Backend, error) {
 	cfg, err := b.Config()
+	if err != nil {
+		return nil, err
+	}
+
+	cfg, err = getBaseConfig(cfg)
 	if err != nil {
 		return nil, err
 	}
