@@ -16,6 +16,7 @@ type ledisListStream struct {
 	db      *ledis.DB
 	key     []byte
 	num     int32
+	s       int32
 	l       int32
 	delLock *sync.RWMutex
 }
@@ -34,6 +35,10 @@ func (self *ledisListStream) Next() (stream.Event, error) {
 
 	self.num += 1
 	return stream.Event(res), nil
+}
+
+func (self *ledisListStream) Len() int {
+	return int(self.s - self.num)
 }
 
 type ledisStreamObj struct {
@@ -89,7 +94,7 @@ func (self *ledisStreamObj) Read(afrom uint, to int) (stream.Stream, error) {
 		return nil, err
 	}
 
-	return &ledisListStream{self.db, self.key, int32(from), int32(to), &self.delLock}, nil
+	return &ledisListStream{self.db, self.key, int32(from), int32(from), int32(to), &self.delLock}, nil
 }
 
 func (self *ledisStreamObj) Del(afrom uint, ato int) (bool, error) {
