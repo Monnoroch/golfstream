@@ -81,7 +81,7 @@ func (self *backendStreamT) Len() (uint, error) {
 }
 
 func (self *backendStreamT) Close() error {
-	return nil
+	return self.bs.Close()
 }
 
 type streamT struct {
@@ -297,6 +297,9 @@ func (self *serviceBackend) close() error {
 
 	errs := errors.List()
 	for _, v := range self.streams {
+		errs.Add(v.Close())
+	}
+	for _, v := range self.bstreams {
 		errs.Add(v.Close())
 	}
 	return errs.Err()

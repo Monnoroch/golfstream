@@ -74,6 +74,11 @@ func NewHandler(b Backend, errorCb func(error)) http.Handler {
 			sendErr(w, err, errorCb)
 			return
 		}
+		defer func() {
+			if err := s.Close(); err != nil {
+				errorCb(err)
+			}
+		}()
 
 		sendErr(w, s.Add(stream.Event(data)), errorCb)
 	}).Methods("POST")
@@ -85,6 +90,11 @@ func NewHandler(b Backend, errorCb func(error)) http.Handler {
 			sendErr(w, err, errorCb)
 			return
 		}
+		defer func() {
+			if err := s.Close(); err != nil {
+				errorCb(err)
+			}
+		}()
 
 		from, err := strconv.Atoi(vars["from"])
 		if err != nil {
@@ -147,6 +157,11 @@ func NewHandler(b Backend, errorCb func(error)) http.Handler {
 			sendErr(w, err, errorCb)
 			return
 		}
+		defer func() {
+			if err := s.Close(); err != nil {
+				errorCb(err)
+			}
+		}()
 
 		from, err := strconv.Atoi(vars["from"])
 		if err != nil {
@@ -183,6 +198,11 @@ func NewHandler(b Backend, errorCb func(error)) http.Handler {
 			sendErr(w, err, errorCb)
 			return
 		}
+		defer func() {
+			if err := s.Close(); err != nil {
+				errorCb(err)
+			}
+		}()
 
 		l, err := s.Len()
 		if err != nil {
