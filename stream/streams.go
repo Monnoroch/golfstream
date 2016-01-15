@@ -14,6 +14,10 @@ func (self emptyStream) Next() (Event, error) {
 	return nil, EOI
 }
 
+func (self emptyStream) Len() int {
+	return 0
+}
+
 func Empty() Stream {
 	return emptyStream{}
 }
@@ -21,6 +25,10 @@ func Empty() Stream {
 type listStream struct {
 	events []Event
 	num    int
+}
+
+func (self *listStream) Len() int {
+	return len(self.events)
 }
 
 func (self *listStream) Next() (Event, error) {
@@ -918,7 +926,16 @@ func Decode(s Stream, d Decoder) Stream {
 	return decodeStream{s, d}
 }
 
+type lenStream interface {
+	Stream
+	Len() int
+}
+
 func Len(s Stream) (int, error) {
+	if l, ok := s.(lenStream); ok {
+		return l.Len(), nil
+	}
+
 	res := 0
 	for {
 		_, err := s.Next()
