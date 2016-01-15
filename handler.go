@@ -108,6 +108,17 @@ func NewHandler(s Service, errorCb func(error)) http.Handler {
 
 	r.HandleFunc("/sbackends/rm/{back}", func(w http.ResponseWriter, r *http.Request) {
 		back := mux.Vars(r)["back"]
+		b, err := s.GetBackend(back)
+		if err != nil {
+			sendErr(w, err, errorCb)
+			return
+		}
+		defer func() {
+			if err := b.Backend().Close(); err != nil {
+				errorCb(err)
+			}
+		}()
+
 		if err := s.RmBackend(back); err != nil {
 			sendErr(w, err, errorCb)
 			return
