@@ -226,16 +226,16 @@ func (self *serviceBackend) RmStream(name string) error {
 	return errs.Err()
 }
 
-func (self *serviceBackend) GetStream(name string) (backend.BackendStream, error) {
+func (self *serviceBackend) GetStream(name string) (backend.BackendStream, string, error) {
 	self.lock.Lock()
 	defer self.lock.Unlock()
 
 	s, ok := self.streams[name]
 	if !ok {
-		return nil, errors.New(fmt.Sprintf("serviceBackend.GetStream: backend with name \"%s\" does not have stream \"%s\"", self.name, name))
+		return nil, "", errors.New(fmt.Sprintf("serviceBackend.GetStream: backend with name \"%s\" does not have stream \"%s\"", self.name, name))
 	}
 
-	return s, nil
+	return s, s.bs.bstream, nil
 }
 
 func (self *serviceBackend) addSub(bstream string) (*backendStreamT, error) {

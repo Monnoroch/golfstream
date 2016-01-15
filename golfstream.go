@@ -11,7 +11,7 @@ type Backend interface {
 	Streams() ([]string, []string, [][]string, error)
 
 	AddStream(bstream, name string, defs []string) (backend.BackendStream, error)
-	GetStream(name string) (backend.BackendStream, error)
+	GetStream(name string) (backend.BackendStream, string, error)
 	RmStream(name string) error
 
 	AddSub(bstream string, s backend.Stream, hFrom uint, hTo int) (stream.Stream, error)
