@@ -3,7 +3,6 @@ package golfstream
 import (
 	"fmt"
 	"github.com/Monnoroch/golfstream/backend"
-	"github.com/Monnoroch/golfstream/dchan"
 	"github.com/Monnoroch/golfstream/errors"
 	"github.com/Monnoroch/golfstream/stream"
 	"sync"
@@ -84,26 +83,33 @@ func (self *backendStreamT) Close() error {
 	return self.bs.Close()
 }
 
+type valueStream struct {
+	evt stream.Event
+}
+
+func (self *valueStream) Next() (stream.Event, error) {
+	if self.evt == nil {
+		return nil, stream.EOI
+	}
+
+	return self.evt, nil
+}
+
 type streamT struct {
 	bs   *backendStreamT
 	defs []string
 
-	ch   dchan.Chan
+	val  *valueStream
 	data stream.Stream
 }
 
 func (self *streamT) Add(evt stream.Event) error {
-	// NOTE: it's a fun trick: the channel has buffer one, so we don't block on Send and
-	// immediately read from it with Next.
-	// Basically, we discard the channels syncronization properties and
-	// just use it as a blocking infinite list interface.
-
 	// NOTE: Since Next is not thread-safe (has changing state), if we call Next from several goroutines
 	// we might mess up this state.
 	// So this function is not thread-safe too, despite the use of a channel.
 	// If we want to make it thread safe it's enough to put the lock around Next,
 	// no need to put Send in a critical section.
-	self.ch.Send(evt)
+	self.val.evt = evt
 	res, err := self.data.Next()
 	if err != nil {
 		return err
@@ -125,7 +131,7 @@ func (self *streamT) Len() (uint, error) {
 }
 
 func (self *streamT) Close() error {
-	self.ch.Close()
+	self.val.evt = nil
 	return nil
 }
 
@@ -177,19 +183,13 @@ func (self *serviceBackend) AddStream(bstream, name string, defs []string) (res 
 		self.bstreams[bstream] = bs
 	}
 
-	ch := dchan.GoChanBuf(1)
-	defer func() {
-		if rerr != nil {
-			ch.Close()
-		}
-	}()
-
-	data, err := stream.Run(dchan.NewChan(ch), defs)
+	st := &valueStream{nil}
+	data, err := stream.Run(st, defs)
 	if err != nil {
 		return nil, err
 	}
 
-	s := &streamT{bs, defs, ch, data}
+	s := &streamT{bs, defs, st, data}
 	self.streams[name] = s
 	bs.refcnt += 1
 	return s, nil
