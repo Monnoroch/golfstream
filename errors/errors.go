@@ -1,3 +1,4 @@
+// Package errors provides helper functions and structures for more natural error handling in some situations.
 package errors
 
 import (
@@ -6,47 +7,78 @@ import (
 	"runtime/debug"
 )
 
+// Convenience funciton to call errors.New() from the standart library.
 func New(text string) error {
 	return errors.New(text)
 }
 
-type exError struct {
+// An exception: an error with the stack trace, similar to the exceptions in other languages like Java.
+type ExError struct {
 	Base      error
 	callstack string
 }
 
-func (self exError) Error() string {
+// Implementation of an error interface for exception.
+func (self ExError) Error() string {
 	return self.Base.Error() + "\n" + self.callstack
 }
 
-func (self exError) Reason() error {
+// Get the underlying error from the exception.
+func (self ExError) Reason() error {
 	return self.Base
 }
 
-func Ex(s string) error {
-	return exError{errors.New(s), string(debug.Stack())}
+// A function to create an exception
+func Ex(s string) ExError {
+	return ExError{errors.New(s), string(debug.Stack())}
 }
 
+// Convert an error to an exception.
+// This function doesn't do anythins with nil errors and errors which are already exceptions.
 func AsEx(err error) error {
 	if err == nil {
 		return nil
 	}
-	if _, ok := err.(exError); ok {
+	if _, ok := err.(ExError); ok {
 		return err
 	}
-	return exError{err, string(debug.Stack())}
+	return ExError{err, string(debug.Stack())}
 }
 
-type errorList struct {
+/*
+An error which is a list of errors.
+It's intended to be used locally in a function to aggregate errors from different calls.
+Here is a typical use case:
+
+		type aggregator struct {
+			val1 io.Closer
+			val2 io.Closer
+			vals []io.Closer
+		}
+
+		func (self *aggregator) CLose() error {
+			errs := errors.List().
+				Add(self.val1.Close()).
+				Add(self.val2.Close())
+			for _, v := range self.vals {
+				errs.Add(v.Close())
+			}
+			return errs.Err()
+		}
+*/
+type ErrorList struct {
 	errs []error
 }
 
-func (self *errorList) Add(err error) *errorList {
+// Add an error to the list.
+// This function ignores nil errors
+// and inlines other error lists so that you don't have error lists of error lists.
+func (self *ErrorList) Add(err error) *ErrorList {
 	if err == nil {
 		return self
 	}
 
-	if v, ok := err.(*errorList); ok {
+	if v, ok := err.(*ErrorList); ok {
 		return self.AddAll(v.errs)
 	}
 
@@ -58,7 +90,9 @@ func (self *errorList) Add(err error) *errorList {
 	return self
 }
 
-func (self *errorList) AddAll(errs []error) *errorList {
+// Add all errors from the array to the error list.
+// Nil errors and other error lists are added as in Add.
+func (self *ErrorList) AddAll(errs []error) *ErrorList {
 	if errs == nil {
 		return self
 	}
@@ -69,7 +103,10 @@ func (self *errorList) AddAll(errs []error) *errorList {
 	return self
 }
 
-func (self *errorList) Err() error {
+// Simplify the error list.
+// This function gives nil for empty error list
+// and a single error for the error list of length one.
+func (self *ErrorList) Err() error {
 	if self.errs == nil {
 		return nil
 	} else {
@@ -84,10 +121,12 @@ func (self *errorList) Err() error {
 	}
 }
 
-func (self *errorList) Error() string {
-	return fmt.Sprintf("%v", self.errs)
+// Implementation of an error interface for error list.
+func (self *ErrorList) Error() string {
+	return fmt.Sprintf("%v", self.Err())
 }
 
-func List() *errorList {
-	return &errorList{}
+// Create an empty error list.
+func List() *ErrorList {
+	return &ErrorList{}
 }
