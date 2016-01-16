@@ -7,7 +7,7 @@ import (
 	"runtime/debug"
 )
 
-// Convenience funciton to call errors.New() from the standart library.
+// Convenience function to call errors.New() from the standart library.
 func New(text string) error {
 	return errors.New(text)
 }
@@ -34,7 +34,7 @@ func Ex(s string) ExError {
 }
 
 // Convert an error to an exception.
-// This function doesn't do anythins with nil errors and errors which are already exceptions.
+// This function doesn't do anything with nil errors and errors which are already exceptions.
 func AsEx(err error) error {
 	if err == nil {
 		return nil
