@@ -86,7 +86,6 @@ func (self *memStreamObj) Len() (uint, error) {
 }
 
 func (self *memStreamObj) Close() error {
-	self.back.release(self)
 	return nil
 }
 
@@ -137,16 +136,6 @@ func (self *memBackend) Drop() error {
 func (self *memBackend) Close() error {
 	self.data = nil
 	return nil
-}
-
-func (self *memBackend) release(s *memStreamObj) {
-	self.lock.Lock()
-	defer self.lock.Unlock()
-
-	s.refcnt -= 1
-	if s.refcnt == 0 {
-		delete(self.data, s.name)
-	}
 }
 
 func NewMem() Backend {
