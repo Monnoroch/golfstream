@@ -17,6 +17,11 @@ func (self chanStream) Next() (stream.Event, error) {
 	return evt, nil
 }
 
+func (self chanStream) Drain() {
+	self.ch.Close()
+	self.ch.Done()
+}
+
 func (self chanStream) Add(evt stream.Event) error {
 	self.ch.Send(evt)
 	return nil

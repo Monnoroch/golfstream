@@ -23,7 +23,6 @@ type ledisListStream struct {
 
 func (self *ledisListStream) Next() (stream.Event, error) {
 	if self.num >= self.l {
-		self.delLock.RUnlock()
 		return nil, stream.EOI
 	}
 
@@ -34,11 +33,19 @@ func (self *ledisListStream) Next() (stream.Event, error) {
 	}
 
 	self.num += 1
+	if self.num >= self.l {
+		self.delLock.RUnlock()
+	}
 	return stream.Event(res), nil
 }
 
 func (self *ledisListStream) Len() int {
 	return int(self.s - self.num)
+}
+
+func (self *ledisListStream) Drain() {
+	self.num = self.l
+	self.delLock.RUnlock()
 }
 
 type ledisStreamObj struct {

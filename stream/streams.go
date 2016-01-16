@@ -18,6 +18,8 @@ func (self emptyStream) Len() int {
 	return 0
 }
 
+func (self emptyStream) Drain() {}
+
 func Empty() Stream {
 	return emptyStream{}
 }
@@ -40,6 +42,11 @@ func (self *listStream) Next() (Event, error) {
 	return self.events[self.num-1], nil
 }
 
+func (self *listStream) Drain() {
+	self.num = len(self.events)
+	self.events = nil
+}
+
 func List(events []Event) Stream {
 	return &listStream{events, 0}
 }
@@ -53,6 +60,10 @@ func (self chanStream) Next() (Event, error) {
 	}
 
 	return evt, nil
+}
+
+func (self chanStream) Drain() {
+	close(self)
 }
 
 func NewChan(ch chan Event) Stream {
@@ -871,8 +882,17 @@ func Join(streams ...Stream) Stream {
 	return &joinStream{streams}
 }
 
+type drainStream interface {
+	Stream
+	Drain()
+}
+
 func Drain(s Stream) error {
-	// TODO: Done for dchan.Stream would be more efficient
+	if l, ok := s.(drainStream); ok {
+		l.Drain()
+		return nil
+	}
+
 	for {
 		_, err := s.Next()
 		if err == EOI {
