@@ -1,3 +1,4 @@
+// Package dchan provides an elastic event channel implementation and a Chan interface, unifying all the go channel types.
 package dchan
 
 import (
@@ -6,20 +7,20 @@ import (
 	"math"
 )
 
-/// Event channel interface
+// Channel interface.
 type Chan interface {
-	/// Send event
+	// Send event to a channel.
 	Send(v stream.Event)
-	/// Receive event and closed flag
+	// Receive event and closed flag from a channel.
 	Recv() (stream.Event, bool)
-	/// Number of events in the channel buffer
+	// Number of events in the channel buffer.
 	Len() int
-	/// Maximum possible number of events in the channel buffer
+	// Maximum possible number of events in the channel buffer.
 	Cap() int
-	/// Close the channel (cant Send after that)
+	// Close the channel.
 	Close()
-	/// If you closed the channel and didn't read the buffer, it may leak
-	/// Call this function after close and before channel is empty to free resources
+	// Free the underlying resources of a closed channel.
+	// Call this function after Close and before channel is empty.
 	Done()
 }
 
@@ -48,10 +49,12 @@ func (self goChan) Close() {
 
 func (self goChan) Done() {}
 
+// Get an implementation of Chan interface for standart go chan stream.Event.
 func GoChan() Chan {
 	return goChan(make(chan stream.Event))
 }
 
+// Get an implementation of Chan interface for standart go buffered chan stream.Event with specified buffer sise.
 func GoChanBuf(buf int) Chan {
 	return goChan(make(chan stream.Event, buf))
 }
@@ -164,6 +167,8 @@ func (self *dynBufChan) run() {
 	fmt.Printf("dynBufChan: max queue len is %v\n", self.maxLen)
 }
 
+// Get an implementation of Chan interface for elastic channel: the channel with infinite, dynamically growing buffer
+// with specified initial buffer sise.
 func ChanDynBuf(buf int) Chan {
 	res := &dynBufChan{
 		queue:    make([]stream.Event, 0, buf),
@@ -178,6 +183,7 @@ func ChanDynBuf(buf int) Chan {
 	return res
 }
 
+// Get an implementation of Chan interface for elastic channel: the channel with infinite, dynamically growing buffer.
 func ChanDyn() Chan {
 	return ChanDynBuf(1)
 }

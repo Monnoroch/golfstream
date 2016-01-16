@@ -32,6 +32,7 @@ func (self chanStream) Close() error {
 	return nil
 }
 
+// Get an object that implements stream.Stream and backend.Stream interfaces with the Chan object.
 func NewChan(ch Chan) chanStream {
 	return chanStream{ch}
 }
