@@ -18,23 +18,23 @@ func (self httpPoster) Post(url string, r io.Reader) (*http.Response, error) {
 	return self.client.Post(url, "text/json", r)
 }
 
-func HttpPoster() Poster {
+func Http() Poster {
 	return httpPoster{&http.Client{}}
 }
 
-type handlerPoster struct {
+type HandlerPoster struct {
 	srv *httptest.Server
 }
 
-func (self handlerPoster) Post(url string, r io.Reader) (*http.Response, error) {
+func (self HandlerPoster) Post(url string, r io.Reader) (*http.Response, error) {
 	return http.Post(url, "text/json", r)
 }
 
-func (self handlerPoster) Close() {
+func (self HandlerPoster) Close() {
 	self.srv.Close()
 }
 
-func HandlerPoster(h http.Handler) (handlerPoster, string) {
-	res := handlerPoster{httptest.NewServer(h)}
+func Handle(h http.Handler) (HandlerPoster, string) {
+	res := HandlerPoster{httptest.NewServer(h)}
 	return res, res.srv.URL
 }

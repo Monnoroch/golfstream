@@ -641,7 +641,7 @@ func NewHttp(baseUrl string, p poster.Poster, errorCb func(error)) (Service, err
 		errorCb = func(error) {}
 	}
 	if p == nil {
-		p = poster.HttpPoster()
+		p = poster.Http()
 	}
 
 	url := baseUrl

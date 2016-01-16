@@ -243,7 +243,7 @@ func (self *httpBackend) Close() error {
 
 func NewHttp(baseUrl string, p poster.Poster) Backend {
 	if p == nil {
-		p = poster.HttpPoster()
+		p = poster.Http()
 	}
 	return &httpBackend{
 		baseUrl,
