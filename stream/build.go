@@ -5,12 +5,13 @@ import (
 	"fmt"
 )
 
+// Build a stream from JSON definition.
 func Run(stream Stream, defs []string) (Stream, error) {
 	if defs == nil {
 		return stream, nil
 	}
 
-	ctx := Context{"input": &streamContext{stream, Multiplexer(stream)}}
+	ctx := Context{"input": &StreamContext{stream, Multiplexer(stream)}}
 	var res Stream = nil
 	for _, d := range defs {
 		funcDef, err := ParseJson([]byte(d))

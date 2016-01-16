@@ -41,6 +41,7 @@ func ParseJson(data []byte) (interface{}, error) {
 	return ParseJsonR(bytes.NewReader(data))
 }
 
+// A better routine for parsing json to an interface{} than a standart one which parses integer numbers as int64, not float64.
 func ParseJsonR(data io.Reader) (interface{}, error) {
 	decoder := json.NewDecoder(data)
 	decoder.UseNumber()

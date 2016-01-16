@@ -20,6 +20,7 @@ func (self emptyStream) Len() int {
 
 func (self emptyStream) Drain() {}
 
+// Create an empty stream.
 func Empty() Stream {
 	return emptyStream{}
 }
@@ -47,6 +48,7 @@ func (self *listStream) Drain() {
 	self.events = nil
 }
 
+// Create a stream from the array of events.
 func List(events []Event) Stream {
 	return &listStream{events, 0}
 }
@@ -66,31 +68,51 @@ func (self chanStream) Drain() {
 	close(self)
 }
 
-func NewChan(ch chan Event) Stream {
+// Create a stream from a channel.
+func Chan(ch chan Event) Stream {
 	return chanStream(ch)
 }
 
-func Chan() Stream {
-	return NewChan(make(chan Event))
-}
+/*
+StreamMultiplexer is a helper structure to create multiple streams that can pull from one base stream.
 
-func ChanBuf(buf int) Stream {
-	return NewChan(make(chan Event, buf))
-}
+Typical usage is:
 
-type streamMultiplexer struct {
+	mp := Multiplexer(s)
+	copy1 := mp.New()
+	copy2 := mp.New()
+	copy3 := mp.New()
+
+	for {
+		evt1, _ := copy1.Next()
+		evt2, _ := copy2.Next()
+		evt3, _ := copy3.Next()
+		// here evt1 == evt2 == evt3
+	}
+
+It is unsafe to use the original stream after it was passed to a multiplexer.
+
+StreamMultiplexer is implemented using buffers, so it consumes amount of memory linear to the number of copies
+and linear to the amount of difference in number of pulled events from copies.
+Basically, if you create two copies, drain first one and don't touch the second, then the multiplexer will have
+a buffer with all the events you have pulled, so you could pull them from the seond copy.
+
+TODO: maby we should implement single buffer for all the copies and each copy would have an index into that buffer.
+*/
+type StreamMultiplexer struct {
 	stream Stream
 	queues [][]Event
 	err    error
 	maxLen int
 }
 
-func (self *streamMultiplexer) New() Stream {
+// Create a stream that pulls from a base stream.
+func (self *StreamMultiplexer) New() Stream {
 	self.queues = append(self.queues, make([]Event, 0))
 	return multiplexedStream{self, len(self.queues) - 1}
 }
 
-func (self *streamMultiplexer) next(num int) (Event, error) {
+func (self *StreamMultiplexer) next(num int) (Event, error) {
 	queue := self.queues[num]
 	if len(queue) > 0 {
 		res := queue[0]
@@ -105,7 +127,7 @@ func (self *streamMultiplexer) next(num int) (Event, error) {
 	res, err := self.stream.Next()
 	if err != nil {
 		self.err = err
-		fmt.Printf("streamMultiplexer: max len is %v\n", self.maxLen)
+		fmt.Printf("StreamMultiplexer: max len is %v\n", self.maxLen)
 		return nil, err
 	}
 
@@ -125,7 +147,7 @@ func (self *streamMultiplexer) next(num int) (Event, error) {
 }
 
 type multiplexedStream struct {
-	mp  *streamMultiplexer
+	mp  *StreamMultiplexer
 	num int
 }
 
@@ -133,8 +155,9 @@ func (self multiplexedStream) Next() (Event, error) {
 	return self.mp.next(self.num)
 }
 
-func Multiplexer(stream Stream) *streamMultiplexer {
-	return &streamMultiplexer{stream, make([][]Event, 0), nil, 0}
+// Create a multiplexer from a stream.
+func Multiplexer(stream Stream) *StreamMultiplexer {
+	return &StreamMultiplexer{stream, make([][]Event, 0), nil, 0}
 }
 
 type zipStream struct {
@@ -157,17 +180,13 @@ func (self zipStream) Next() (Event, error) {
 	return res, nil
 }
 
+/*
+Zip multiple streams into one stream, that will yield arrays of events from all these streams.
+
+The resulting stream will end as soon as the first of these base streams.
+*/
 func Zip(streams ...Stream) Stream {
 	return zipStream{streams}
-}
-
-func Multiplex(stream Stream, num int) Stream {
-	mp := Multiplexer(stream)
-	streams := make([]Stream, num)
-	for i := 0; i < num; i++ {
-		streams[i] = mp.New()
-	}
-	return Zip(streams...)
 }
 
 type mapStream struct {
@@ -184,6 +203,7 @@ func (self mapStream) Next() (Event, error) {
 	return self.fn(evt)
 }
 
+// Map a function over a stream.
 func Map(stream Stream, fn func(Event) (Event, error)) Stream {
 	return mapStream{stream, fn}
 }
@@ -223,6 +243,12 @@ func getFieldImpl(evt Event, field string) (interface{}, bool) {
 	return getFieldImplRec(evt, arr)
 }
 
+/*
+Creates a stream with events which are values of a field in events of the original stream as in JSON.
+Returns an error if the original field doesn't exist.
+
+The field might be deep inside, as in "object.value.data".
+*/
 func GetField(stream Stream, field string) Stream {
 	return Map(stream, func(evt Event) (Event, error) {
 		res, ok := getFieldImpl(evt, field)
@@ -314,16 +340,23 @@ func (self setFieldStream) Next() (Event, error) {
 	}
 }
 
+/*
+Creates a stream with events which are events from a first stream with given field set with values from events of the second stream as in JSON.
+
+The field might be deep inside, as in "object.value.data".
+*/
 func SetField(datas Stream, vals Stream, field string) Stream {
 	return setFieldStream{datas, vals, field}
 }
 
+// Creates a boolean stream with true events when the event of an original stream is equal to a given value and false events otherwise.
 func EqVal(stream Stream, evt Event) Stream {
 	return Map(stream, func(e Event) (Event, error) {
 		return reflect.DeepEqual(e, evt), nil
 	})
 }
 
+// Creates a boolean stream with false events when the event of an original stream is equal to a given value and true events otherwise.
 func NeqVal(stream Stream, evt Event) Stream {
 	return Map(stream, func(e Event) (Event, error) {
 		return !reflect.DeepEqual(e, evt), nil
@@ -359,6 +392,11 @@ func getIntOrFloat(arg FArg) (float64, bool) {
 	return 0, false
 }
 
+/*
+Creates a boolean stream with true events when the event of an original stream is more than a given value and false events otherwise.
+
+Original stream must consist of numbers.
+*/
 func MoreVal(stream Stream, val float64) Stream {
 	return Map(stream, func(e Event) (Event, error) {
 		v, ok := getIntOrFloat(e)
@@ -370,6 +408,11 @@ func MoreVal(stream Stream, val float64) Stream {
 	})
 }
 
+/*
+Creates a boolean stream with true events when the event of an original stream is more or equal to a given value and false events otherwise.
+
+Original stream must consist of numbers.
+*/
 func MoreEqVal(stream Stream, val float64) Stream {
 	return Map(stream, func(e Event) (Event, error) {
 		v, ok := getIntOrFloat(e)
@@ -381,6 +424,11 @@ func MoreEqVal(stream Stream, val float64) Stream {
 	})
 }
 
+/*
+Creates a boolean stream with true events when the event of an original stream is less than a given value and false events otherwise.
+
+Original stream must consist of numbers.
+*/
 func LessVal(stream Stream, val float64) Stream {
 	return Map(stream, func(e Event) (Event, error) {
 		v, ok := getIntOrFloat(e)
@@ -392,6 +440,11 @@ func LessVal(stream Stream, val float64) Stream {
 	})
 }
 
+/*
+Creates a boolean stream with true events when the event of an original stream is less or equal to a given value and false events otherwise.
+
+Original stream must consist of numbers.
+*/
 func LessEqVal(stream Stream, val float64) Stream {
 	return Map(stream, func(e Event) (Event, error) {
 		v, ok := getIntOrFloat(e)
@@ -436,6 +489,9 @@ func (self orStream) Next() (Event, error) {
 	return ok, nil
 }
 
+/*
+Takes multiple boolean streams and creates a boolean stream, or-ing events from original streams.
+*/
 func Or(streams ...Stream) Stream {
 	return orStream{streams}
 }
@@ -473,6 +529,9 @@ func (self andStream) Next() (Event, error) {
 	return ok, nil
 }
 
+/*
+Takes multiple boolean streams and creates a boolean stream, and-ing events from original streams.
+*/
 func And(streams ...Stream) Stream {
 	return andStream{streams}
 }
@@ -504,6 +563,9 @@ func (self filterStream) Next() (Event, error) {
 	}
 }
 
+/*
+Takes a data stream and flags stream and produces a stream with events from the data stream for which corresponding flag is true.
+*/
 func Filter(stream Stream, flags Stream) Stream {
 	return filterStream{stream, flags}
 }
@@ -550,6 +612,9 @@ func (self *maxByStream) Next() (Event, error) {
 	return self.data, nil
 }
 
+/*
+Takes a data stream and numbers stream and produces a stream with event from the data stream for which corresponding value is maximal.
+*/
 func MaxBy(datas Stream, vals Stream) Stream {
 	return &maxByStream{datas, vals, nil, -math.MaxFloat64, false}
 }
@@ -595,6 +660,9 @@ func (self *minByStream) Next() (Event, error) {
 	}
 }
 
+/*
+Takes a data stream and numbers stream and produces a stream with event from the data stream for which corresponding value is minimal.
+*/
 func MinBy(datas Stream, vals Stream) Stream {
 	return &minByStream{datas, vals, nil, math.MaxFloat64, false}
 }
@@ -618,6 +686,9 @@ func (self *repeatStream) Next() (Event, error) {
 	return self.val, nil
 }
 
+/*
+Create a stream of one event repeated infinitely.
+*/
 func Repeat(stream Stream) Stream {
 	return &repeatStream{stream, false, nil}
 }
@@ -649,6 +720,9 @@ func (self *emaStream) Next() (Event, error) {
 	return self.state, nil
 }
 
+/*
+Get a numbers stream and produce a stream of EMAs of these numbers.
+*/
 func Ema(stream Stream, alpha float64) Stream {
 	return &emaStream{stream, alpha, 0, false}
 }
@@ -693,6 +767,9 @@ func (self *rollingMaxByStream) Next() (Event, error) {
 	}
 }
 
+/*
+Takes a data stream and numbers stream and produces a stream with events from the data stream for which corresponding maximal value event changes.
+*/
 func RollingMaxBy(datas Stream, vals Stream) Stream {
 	return &rollingMaxByStream{datas, vals, -math.MaxFloat64, false}
 }
@@ -737,6 +814,9 @@ func (self *rollingMinByStream) Next() (Event, error) {
 	}
 }
 
+/*
+Takes a data stream and numbers stream and produces a stream with events from the data stream for which corresponding minimal value event changes.
+*/
 func RollingMinBy(datas Stream, vals Stream) Stream {
 	return &rollingMinByStream{datas, vals, math.MaxFloat64, false}
 }
@@ -782,6 +862,9 @@ func (self *rollingMaxByAllStream) Next() (Event, error) {
 	return self.data, nil
 }
 
+/*
+Takes a data stream and numbers stream and produces a stream with events from the data stream for which the current value is maximal.
+*/
 func RollingMaxByAll(datas Stream, vals Stream) Stream {
 	return &rollingMaxByAllStream{datas, vals, nil, -math.MaxFloat64, false}
 }
@@ -827,10 +910,16 @@ func (self *rollingMinByAllStream) Next() (Event, error) {
 	return self.data, nil
 }
 
+/*
+Takes a data stream and numbers stream and produces a stream with events from the data stream for which the current value is minimal.
+*/
 func RollingMinByAll(datas Stream, vals Stream) Stream {
 	return &rollingMinByAllStream{datas, vals, nil, math.MaxFloat64, false}
 }
 
+/*
+Takes a stream af strings and append a given string to all of them.
+*/
 func StringAppend(stream Stream, suf string) Stream {
 	return Map(stream, func(val Event) (Event, error) {
 		v, ok := val.(string)
@@ -842,6 +931,9 @@ func StringAppend(stream Stream, suf string) Stream {
 	})
 }
 
+/*
+Takes a stream af strings and prepend a given string to all of them.
+*/
 func StringPrepend(stream Stream, pref string) Stream {
 	return Map(stream, func(val Event) (Event, error) {
 		v, ok := val.(string)
@@ -878,6 +970,9 @@ func (self *joinStream) Next() (Event, error) {
 	return val, nil
 }
 
+/*
+Join multiple streams sequentially in one longer stream.
+*/
 func Join(streams ...Stream) Stream {
 	return &joinStream{streams}
 }
@@ -887,6 +982,11 @@ type drainStream interface {
 	Drain()
 }
 
+/*
+Drain a stream.
+
+This function uses a specific possibly more efficient implementation for streams that define Drain() method.
+*/
 func Drain(s Stream) error {
 	if l, ok := s.(drainStream); ok {
 		l.Drain()
@@ -919,6 +1019,9 @@ func (self encodeStream) Next() (Event, error) {
 	return self.e.Encode(evt)
 }
 
+/*
+Create a stream of encoded events of type []byte.
+*/
 func Encode(s Stream, e Encoder) Stream {
 	return encodeStream{s, e}
 }
@@ -942,6 +1045,9 @@ func (self decodeStream) Next() (Event, error) {
 	return self.d.Decode(bs)
 }
 
+/*
+From a stream of []byte events create a stream of decoded events.
+*/
 func Decode(s Stream, d Decoder) Stream {
 	return decodeStream{s, d}
 }
@@ -951,6 +1057,11 @@ type lenStream interface {
 	Len() int
 }
 
+/*
+Get the length of a stream.
+
+This function uses a specific possibly more efficient implementation for streams that define Len() int method.
+*/
 func Len(s Stream) (int, error) {
 	if l, ok := s.(lenStream); ok {
 		return l.Len(), nil

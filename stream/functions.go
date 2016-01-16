@@ -5,6 +5,7 @@ import (
 	"fmt"
 )
 
+// Register stream functions pre-defined by this library.
 func RegisterDefault() {
 	RegisterDefaultEncoders()
 	RegisterDefaultDecoders()
@@ -86,7 +87,7 @@ func save(ctx Context, args []FArg) (Stream, error) {
 		return nil, err
 	}
 
-	ctx[name] = &streamContext{
+	ctx[name] = &StreamContext{
 		stream: proc,
 		mp:     Multiplexer(proc),
 	}

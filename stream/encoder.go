@@ -4,10 +4,12 @@ import (
 	"sync"
 )
 
+// Encoder is an interface for encoding event to a byte array.
 type Encoder interface {
 	Encode(evt Event) ([]byte, error)
 }
 
+// Decoder is an interface for decoding event from a byte array.
 type Decoder interface {
 	Decode(data []byte) (Event, error)
 }
@@ -15,6 +17,7 @@ type Decoder interface {
 var encoders map[string]Encoder
 var elock sync.Mutex
 
+// Register encoder by name for building it from JSON definitions.
 func RegisterEncoder(name string, e Encoder) {
 	elock.Lock()
 	defer elock.Unlock()
@@ -36,6 +39,7 @@ func getEncoder(name string) (Encoder, bool) {
 var decoders map[string]Decoder
 var dlock sync.Mutex
 
+// Register decoder by name for building it from JSON definitions.
 func RegisterDecoder(name string, d Decoder) {
 	dlock.Lock()
 	defer dlock.Unlock()
