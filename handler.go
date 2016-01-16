@@ -31,6 +31,9 @@ func sendErr(w http.ResponseWriter, err error, errorCb func(error)) (rerr error)
 	return json.NewEncoder(w).Encode(&errorObj{Err: err.Error()})
 }
 
+/*
+Create a http.Handler that maps URLs from HTTP service and websocket commands from it to a methods of an object implementing Service interface.
+*/
 func NewHandler(s Service, errorCb func(error)) http.Handler {
 	if errorCb == nil {
 		errorCb = func(error) {}

@@ -636,6 +636,8 @@ func (self *remoteService) run(ws *websocket.Conn) error {
 	return nil
 }
 
+// Create a golfstream remote service implementation that doesn't itseld do anything except sending commands to remote server
+// wia HTTP and a websoket.
 func NewHttp(baseUrl string, p poster.Poster, errorCb func(error)) (Service, error) {
 	if errorCb == nil {
 		errorCb = func(error) {}

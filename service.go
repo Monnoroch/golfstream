@@ -381,6 +381,7 @@ func (self *service) Close() error {
 	return errs.Err()
 }
 
+// Create the golfstream service.
 func New() Service {
 	return &service{sync.Mutex{}, map[string]*serviceBackend{}, true}
 }
