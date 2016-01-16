@@ -20,6 +20,8 @@ An error might be EOI in which case you just need to stop iteration, or any othe
 
 Calling the Next method on a Stream after it already returned an error is unspecified and may be unsafe.
 
+Calling the Next method on a Stream from multiple goroutines at once is unspecified and may be unsafe.
+
 Typical iteration over the steam looks like this:
 
 	func iter(s Stream, callback func(Event)) error {
