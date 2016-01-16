@@ -138,6 +138,11 @@ func (self *memBackend) Close() error {
 	return nil
 }
 
+/*
+Create a backend that stores pushed events in memory, so they don't persist on the disc.
+
+Can be used for mocking a real backend in tests.
+*/
 func NewMem() Backend {
 	return &memBackend{sync.Mutex{}, map[string]*memStreamObj{}}
 }

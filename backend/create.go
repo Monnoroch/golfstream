@@ -6,11 +6,13 @@ import (
 	"sync"
 )
 
+// BackendCreator is a function that created a specific type of backend from config.
 type BackendCreator func(args interface{}) (Backend, error)
 
 var block sync.Mutex
 var backends map[string]BackendCreator
 
+// Register backend creator by backend type.
 func RegisterCreator(btype string, creator BackendCreator) error {
 	block.Lock()
 	defer block.Unlock()
@@ -28,6 +30,7 @@ func RegisterCreator(btype string, creator BackendCreator) error {
 	return nil
 }
 
+// Create a backend by it's type and config.
 func Create(btype string, args interface{}) (Backend, error) {
 	block.Lock()
 	defer block.Unlock()
@@ -39,6 +42,7 @@ func Create(btype string, args interface{}) (Backend, error) {
 	return r(args)
 }
 
+// List all the backend types registered.
 func CreatorTypes() []string {
 	block.Lock()
 	defer block.Unlock()
@@ -50,6 +54,7 @@ func CreatorTypes() []string {
 	return res
 }
 
+// Register backend creators provided by this library.
 func RegisterDefault() {
 	RegisterCreator("nil", func(arg interface{}) (Backend, error) {
 		return NewNil(), nil

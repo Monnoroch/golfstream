@@ -241,6 +241,9 @@ func (self *httpBackend) Close() error {
 	return nil
 }
 
+/*
+Create a remote http backend/ It doesn't store anything and just send commants to a remote server via HTTP.
+*/
 func NewHttp(baseUrl string, p poster.Poster) Backend {
 	if p == nil {
 		p = poster.Http()

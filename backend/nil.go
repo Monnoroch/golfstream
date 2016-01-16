@@ -79,6 +79,7 @@ func (self nilBackend) Close() error {
 	return nil
 }
 
+// Create a nil backend, that doesn't store pushed events and just ignores them.
 func NewNil() Backend {
 	return nilBackend{}
 }

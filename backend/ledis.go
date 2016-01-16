@@ -252,6 +252,9 @@ func (self *ledisBackend) release(s *ledisStreamObj) {
 	}
 }
 
+/*
+Create a backend that stores pushed events in ledisdb.
+*/
 func NewLedis(dirname string) (Backend, error) {
 	lcfg := config.NewConfigDefault()
 	lcfg.DataDir = dirname

@@ -1,32 +1,35 @@
+// A package with a Backend interface for storing streams of data and it's implementations for different storage engines.
 package backend
 
 import (
 	"github.com/Monnoroch/golfstream/stream"
 )
 
-/// Interface for a physical stream on a backend
+// BackendStream is an interface for manipulating stream of events stored on a backend.
 type BackendStream interface {
 	Stream
-	/// Read the events from the stream in [@from:@to).
-	/// @to == -1 means to the end
+	// Read a range of events from the stream.
+	// If from or to is < 0 then it adds Len() + 1 to them.
 	Read(from uint, to int) (stream.Stream, error)
-	/// Delete events from the stream
-	/// @to == -1 means to the end
+	// Delete a range of events from the stream.
+	// If from or to is < 0 then it adds Len() + 1 to them.
 	Del(from uint, to int) (bool, error)
-	/// Get a number of events in the stream
+	// Get a number of events in the stream.
 	Len() (uint, error)
 }
 
-/// Stream storage handler interface
+/*
+Backend is an interface for stream storage system.
+*/
 type Backend interface {
-	/// Get backend config
+	// Get backend configuration.
 	Config() (interface{}, error)
-	/// List all available streams
+	// List all available streams.
 	Streams() ([]string, error)
-	/// Get a stream handler for the @name
+	// Get a BackendStream for the stream by it's name.
 	GetStream(name string) (BackendStream, error)
-	/// Delete all streams and supporting databases
+	// Delete all streams and supporting databases.
 	Drop() error
-	/// Close the backend handler
+	// Close the backend handler.
 	Close() error
 }

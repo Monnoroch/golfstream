@@ -1,39 +1,23 @@
 package backend
 
 import (
-	"fmt"
-	"github.com/Monnoroch/golfstream/dchan"
 	"github.com/Monnoroch/golfstream/stream"
 	"sync/atomic"
 )
 
-/// Push interface for a stream of events
+// Striam is an interface for consuming events.
 type Stream interface {
-	/// Add event to the stream
+	// Push event to the stream.
 	Add(stream.Event) error
-	/// Close the stream handler
+	// Close the stream handler.
 	Close() error
 }
 
-type chanStream struct {
-	ch dchan.Chan
-}
+/*
+Copy a producer stream to a consumer stream.
 
-func (self chanStream) Add(evt stream.Event) error {
-	self.ch.Send(evt)
-	return nil
-}
-
-func (self chanStream) Close() error {
-	fmt.Println("chanStream CLOSE")
-	self.ch.Close()
-	return nil
-}
-
-func NewChan(ch dchan.Chan) Stream {
-	return chanStream{ch}
-}
-
+Returns an optional error and, if error is not nil, a flag indicating whether this error had happened in the consumer (false) or the producer (true).
+*/
 func Copy(drain stream.Stream, sink Stream) (error, bool) {
 	for {
 		val, err := drain.Next()
@@ -51,14 +35,33 @@ func Copy(drain stream.Stream, sink Stream) (error, bool) {
 	return nil, false
 }
 
-type bufferedStream struct {
+/*
+Buffered stream is an implementation of a stream that collects all pushed events in a buffer until Start() is called.
+After that it flushes all events in the buffer to a base stream and then adds all the new incoming events directly to the base stream.
+
+The usecase for it is event subscription to a golfstream service.
+When you add a subscriber golfstream returns you a stream representing a range from backend stream's history
+and you might want to push the history to this subscriber befire any new events.
+
+Then you wrap your subscriber with BufferedStream before adding it to the golfstream service,
+manually push the history and call Start() like this:
+
+	bsub := backend.Buffered(sub, 0)
+	history, _ := sback.AddSub(bstrName, bsub, 0, -1)
+	go func() {
+		_, _ := backend.CopyDirect(history, bsub)
+		bsub.Start()
+	}()
+*/
+type BufferedStream struct {
 	base Stream
 
 	mode uint32
 	buf  []stream.Event
 }
 
-func (self *bufferedStream) Add(evt stream.Event) error {
+// And implementation of backend.Stream.Add for BufferedStream.
+func (self *BufferedStream) Add(evt stream.Event) error {
 	if atomic.LoadUint32(&self.mode) == 0 {
 		self.buf = append(self.buf, evt)
 		return nil
@@ -78,23 +81,31 @@ func (self *bufferedStream) Add(evt stream.Event) error {
 	return self.base.Add(evt)
 }
 
-func (self *bufferedStream) AddDirect(evt stream.Event) error {
+func (self *BufferedStream) addDirect(evt stream.Event) error {
 	return self.base.Add(evt)
 }
 
-func (self *bufferedStream) Start() {
+// Tell the buffered stream that it can safely push to the the base stream now.
+func (self *BufferedStream) Start() {
 	atomic.StoreUint32(&self.mode, 1)
 }
 
-func (self *bufferedStream) Close() error {
+// And implementation of backend.Stream.Close for BufferedStream.
+func (self *BufferedStream) Close() error {
 	return self.base.Close()
 }
 
-func Buffered(s Stream, buf int) *bufferedStream {
-	return &bufferedStream{s, 0, make([]stream.Event, 0, buf)}
+/*
+Create a buffered stream from a stream.
+
+Using original stream after creating a bufferes stream from it is unsafe.
+*/
+func Buffered(s Stream, buf int) *BufferedStream {
+	return &BufferedStream{s, 0, make([]stream.Event, 0, buf)}
 }
 
-func CopyDirect(drain stream.Stream, sink *bufferedStream) (error, bool) {
+// An analog of Copy for BufferedStream sink.
+func CopyDirect(drain stream.Stream, sink *BufferedStream) (error, bool) {
 	for {
 		val, err := drain.Next()
 		if err == stream.EOI {
@@ -104,7 +115,7 @@ func CopyDirect(drain stream.Stream, sink *bufferedStream) (error, bool) {
 			return err, false
 		}
 
-		if err := sink.AddDirect(val); err != nil {
+		if err := sink.addDirect(val); err != nil {
 			return err, true
 		}
 	}

@@ -29,6 +29,9 @@ func sendErr(w http.ResponseWriter, err error, errorCb func(error)) (rerr error)
 	return json.NewEncoder(w).Encode(&errorObj{Err: err.Error()})
 }
 
+/*
+Create a http.Handler that maps URLs from HTTP backend to a methods of an object implementing Backend interface.
+*/
 func NewHandler(b Backend, errorCb func(error)) http.Handler {
 	r := mux.NewRouter()
 
