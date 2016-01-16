@@ -1,4 +1,4 @@
-// A packege for manipulating streams of events, which are basically any pieces of data.
+// A package for manipulating streams of events, which are basically any pieces of data.
 package stream
 
 import (
