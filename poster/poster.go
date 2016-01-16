@@ -44,10 +44,13 @@ func (self handlerPoster) Close() error {
 	return nil
 }
 
-// Create a Poster implementation with standart net/http/httptest library
-// that creates POST requests to a specific http.Handler.
-// You need to Close it after you're done.
-// Close always returns nil for this implementation.
+/*
+Create a Poster implementation with standart net/http/httptest library
+that creates POST requests to a specific http.Handler.
+
+You need to Close it after you're done.
+Close always returns nil for this implementation.
+*/
 func Handle(h http.Handler) (PosterCloser, string) {
 	res := handlerPoster{httptest.NewServer(h)}
 	return res, res.srv.URL
