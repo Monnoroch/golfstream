@@ -205,17 +205,15 @@ func (self *ledisBackend) Streams() ([]string, error) {
 	r := make([][]byte, 0, 10)
 	lastKey := []byte{}
 	for {
-		keys, err := self.db.Scan(ledis.LIST, lastKey, 10, true, "")
+		keys, err := self.db.Scan(ledis.LIST, lastKey, 10, false, "")
 		if err != nil {
 			return nil, err
 		}
-		if len(keys) == 0 || (len(keys) == 1 && string(keys[0]) == string(lastKey)) {
+		if len(keys) == 0 {
 			break
 		}
 
-		for _, v := range keys {
-			r = append(r, v)
-		}
+		r = append(r, keys...)
 		lastKey = r[len(r)-1]
 	}
 
