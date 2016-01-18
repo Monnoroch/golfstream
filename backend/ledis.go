@@ -7,7 +7,6 @@ import (
 	"github.com/siddontang/ledisdb/config"
 	"github.com/siddontang/ledisdb/ledis"
 	"log"
-	"math"
 	"os"
 	"sync"
 )
@@ -203,14 +202,27 @@ func (self *ledisBackend) Config() (interface{}, error) {
 }
 
 func (self *ledisBackend) Streams() ([]string, error) {
-	keys, err := self.db.Scan(ledis.KV, []byte{}, int(math.MaxInt32), true, "")
-	if err != nil {
-		return nil, err
+	r := make([][]byte, 0, 10)
+	lastKey := []byte{}
+	for {
+		keys, err := self.db.Scan(ledis.LIST, lastKey, 10, true, "")
+		if err != nil {
+			return nil, err
+		}
+		if len(keys) == 0 || (len(keys) == 1 && string(keys[0]) == string(lastKey)) {
+			break
+		}
+
+		for _, v := range keys {
+			r = append(r, v)
+		}
+		lastKey = r[len(r)-1]
 	}
 
-	res := make([]string, len(keys))
-	for i, v := range keys {
+	res := make([]string, len(r))
+	for i, v := range r {
 		res[i] = string(v)
+		r[i] = nil // help GC
 	}
 	return res, nil
 }
