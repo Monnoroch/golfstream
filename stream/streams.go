@@ -1082,6 +1082,9 @@ func Len(s Stream) (int, error) {
 	return res, nil
 }
 
+/*
+Format fields of events into string stream.
+*/
 func Sprintf(stream Stream, sfmt string, fields []string) Stream {
 	return Map(stream, func(evt Event) (Event, error) {
 		vals := make([]interface{}, len(fields))
