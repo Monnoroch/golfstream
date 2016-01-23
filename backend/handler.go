@@ -86,6 +86,43 @@ func NewHandler(b Backend, errorCb func(error)) http.Handler {
 		sendErr(w, s.Add(stream.Event(data)), errorCb)
 	}).Methods("POST")
 
+	r.HandleFunc("/streams/{name}/interval/{from}:{to}", func(w http.ResponseWriter, r *http.Request) {
+		vars := mux.Vars(r)
+		s, err := b.GetStream(vars["name"])
+		if err != nil {
+			sendErr(w, err, errorCb)
+			return
+		}
+		defer func() {
+			if err := s.Close(); err != nil {
+				errorCb(err)
+			}
+		}()
+
+		from, err := strconv.Atoi(vars["from"])
+		if err != nil {
+			sendErr(w, err, errorCb)
+			return
+		}
+
+		to, err := strconv.Atoi(vars["to"])
+		if err != nil {
+			sendErr(w, err, errorCb)
+			return
+		}
+
+		f, t, err := s.Interval(from, to)
+		if err != nil {
+			sendErr(w, err, errorCb)
+			return
+		}
+
+		if err := json.NewEncoder(w).Encode(&interErrorObj{From: f, To: t}); err != nil {
+			sendErr(w, err, errorCb)
+			return
+		}
+	}).Methods("POST")
+
 	r.HandleFunc("/streams/{name}/read/{from}:{to}", func(w http.ResponseWriter, r *http.Request) {
 		vars := mux.Vars(r)
 		s, err := b.GetStream(vars["name"])
@@ -106,7 +143,7 @@ func NewHandler(b Backend, errorCb func(error)) http.Handler {
 		}
 
 		if from < 0 {
-			sendErr(w, errors.New(fmt.Sprintf("Expected from to be >= 0, got %v", from)), errorCb)
+			sendErr(w, errors.New(fmt.Sprintf("Expected \"from\" to be >= 0, got %v", from)), errorCb)
 			return
 		}
 
@@ -116,7 +153,12 @@ func NewHandler(b Backend, errorCb func(error)) http.Handler {
 			return
 		}
 
-		str, err := s.Read(uint(from), to)
+		if to < 0 {
+			sendErr(w, errors.New(fmt.Sprintf("Expected \"to\" to be >= 0, got %v", to)), errorCb)
+			return
+		}
+
+		str, err := s.Read(uint(from), uint(to))
 		if err != nil {
 			sendErr(w, err, errorCb)
 			return
@@ -173,7 +215,7 @@ func NewHandler(b Backend, errorCb func(error)) http.Handler {
 		}
 
 		if from < 0 {
-			sendErr(w, errors.New(fmt.Sprintf("Expected from to be >= 0, got %v", from)), errorCb)
+			sendErr(w, errors.New(fmt.Sprintf("Expected \"from\" to be >= 0, got %v", from)), errorCb)
 			return
 		}
 
@@ -183,7 +225,12 @@ func NewHandler(b Backend, errorCb func(error)) http.Handler {
 			return
 		}
 
-		ok, err := s.Del(uint(from), to)
+		if to < 0 {
+			sendErr(w, errors.New(fmt.Sprintf("Expected \"to\" to be >= 0, got %v", to)), errorCb)
+			return
+		}
+
+		ok, err := s.Del(uint(from), uint(to))
 		if err != nil {
 			sendErr(w, err, errorCb)
 			return

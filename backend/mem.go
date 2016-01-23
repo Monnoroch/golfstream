@@ -24,8 +24,7 @@ func (self *memStreamObj) Add(evt stream.Event) error {
 	return nil
 }
 
-func (self *memStreamObj) Read(afrom uint, to int) (stream.Stream, error) {
-	from := int(afrom)
+func (self *memStreamObj) Read(from uint, to uint) (stream.Stream, error) {
 	if from == to {
 		return stream.Empty(), nil
 	}
@@ -35,25 +34,35 @@ func (self *memStreamObj) Read(afrom uint, to int) (stream.Stream, error) {
 
 	l := len(self.data)
 
-	if to < 0 {
-		to = l + 1 + to
-	}
-	if from < 0 {
-		from = l + 1 + from
-	}
-
-	if err := checkRange(from, to, l, "memStreamObj.Read"); err != nil {
+	if _, _, err := convRange(int(from), int(to), l, "memStreamObj.Read"); err != nil {
 		return nil, err
 	}
 
-	if from == to {
-		return stream.Empty(), nil
-	}
 	return stream.List(self.data[from:to]), nil
 }
 
-func (self *memStreamObj) Del(afrom uint, to int) (bool, error) {
-	from := int(afrom)
+func (self *memStreamObj) Interval(from int, to int) (uint, uint, error) {
+	if from == to {
+		return 0, 0, nil
+	}
+
+	self.lock.Lock()
+	l := len(self.data)
+	self.lock.Unlock()
+
+	f, t, err := convRange(from, to, l, "memStreamObj.Interval")
+	if err != nil {
+		return 0, 0, err
+	}
+
+	if f == t {
+		return 0, 0, nil
+	}
+
+	return f, t, nil
+}
+
+func (self *memStreamObj) Del(from uint, to uint) (bool, error) {
 	if from == to {
 		return true, nil
 	}
@@ -63,14 +72,7 @@ func (self *memStreamObj) Del(afrom uint, to int) (bool, error) {
 
 	l := len(self.data)
 
-	if to < 0 {
-		to = l + 1 + to
-	}
-	if from < 0 {
-		from = l + 1 + from
-	}
-
-	if err := checkRange(int(from), to, l, "memStreamObj.Del"); err != nil {
+	if _, _, err := convRange(int(from), int(to), l, "memStreamObj.Del"); err != nil {
 		return false, err
 	}
 

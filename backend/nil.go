@@ -6,24 +6,30 @@ import (
 	"github.com/Monnoroch/golfstream/stream"
 )
 
-func checkRange(from int, to int, l int, fn string) error {
-	if to < 0 {
-		to = l + 1 + to
-	}
+func convRange(from int, to int, l int, fn string) (uint, uint, error) {
 	if from < 0 {
 		from = l + 1 + from
 	}
-
+	if from < 0 {
+		from = 0
+	}
+	if to < 0 {
+		to = l + 1 + to
+	}
+	if to < 0 {
+		return 0, 0, errors.New(fmt.Sprintf("%s: to:%v < 0", fn, to))
+	}
 	if from > l {
-		return errors.New(fmt.Sprintf("%s: from:%v > len:%v", fn, from, l))
+		return 0, 0, errors.New(fmt.Sprintf("%s: from:%v > len:%v", fn, from, l))
 	}
 	if to > l {
-		return errors.New(fmt.Sprintf("%s: to:%v > len:%v", fn, to, l))
+		return 0, 0, errors.New(fmt.Sprintf("%s: to:%v > len:%v", fn, to, l))
 	}
 	if from > to {
-		return errors.New(fmt.Sprintf("%s: from:%v > to:%v", fn, from, to))
+		return 0, 0, errors.New(fmt.Sprintf("%s: from:%v > to:%v", fn, from, to))
 	}
-	return nil
+
+	return uint(from), uint(to), nil
 }
 
 type nilStreamObj struct{}
@@ -32,15 +38,24 @@ func (self nilStreamObj) Add(evt stream.Event) error {
 	return nil
 }
 
-func (self nilStreamObj) Read(from uint, to int) (stream.Stream, error) {
-	if err := checkRange(int(from), to, 0, "nilStreamObj.Read"); err != nil {
+func (self nilStreamObj) Read(from uint, to uint) (stream.Stream, error) {
+	if _, _, err := convRange(int(from), int(to), 0, "nilStreamObj.Read"); err != nil {
 		return nil, err
 	}
 	return stream.Empty(), nil
 }
 
-func (self nilStreamObj) Del(from uint, to int) (bool, error) {
-	if err := checkRange(int(from), to, 0, "nilStreamObj.Del"); err != nil {
+func (self nilStreamObj) Interval(from int, to int) (uint, uint, error) {
+	f, t, err := convRange(from, to, 0, "nilStreamObj.Interval")
+	if err != nil {
+		return 0, 0, err
+	}
+
+	return f, t, nil
+}
+
+func (self nilStreamObj) Del(from uint, to uint) (bool, error) {
+	if _, _, err := convRange(int(from), int(to), 0, "nilStreamObj.Del"); err != nil {
 		return false, err
 	}
 	return true, nil

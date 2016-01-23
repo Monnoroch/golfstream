@@ -8,12 +8,12 @@ import (
 // BackendStream is an interface for manipulating stream of events stored on a backend.
 type BackendStream interface {
 	Stream
+	// Convert a relative interval into an absolute: like (0, -1) into (0, Len()).
+	Interval(from int, to int) (uint, uint, error)
 	// Read a range of events from the stream.
-	// If from or to is < 0 then it adds Len() + 1 to them.
-	Read(from uint, to int) (stream.Stream, error)
+	Read(from uint, to uint) (stream.Stream, error)
 	// Delete a range of events from the stream.
-	// If from or to is < 0 then it adds Len() + 1 to them.
-	Del(from uint, to int) (bool, error)
+	Del(from uint, to uint) (bool, error)
 	// Get a number of events in the stream.
 	Len() (uint, error)
 }

@@ -49,11 +49,15 @@ func (self *remoteStreamT) Add(evt stream.Event) error {
 	return self.s.add(self.back, self.name, evt)
 }
 
-func (self *remoteStreamT) Read(from uint, to int) (stream.Stream, error) {
+func (self *remoteStreamT) Read(from uint, to uint) (stream.Stream, error) {
 	return self.bs.Read(from, to)
 }
 
-func (self *remoteStreamT) Del(from uint, to int) (bool, error) {
+func (self *remoteStreamT) Interval(from int, to int) (uint, uint, error) {
+	return self.bs.Interval(from, to)
+}
+
+func (self *remoteStreamT) Del(from uint, to uint) (bool, error) {
 	return self.bs.Del(from, to)
 }
 
@@ -180,12 +184,12 @@ func (self *remoteServiceBackend) RmStream(name string) error {
 	return callErr(self.p, fmt.Sprintf("%s/streams/rm/%s", self.sbaseUrl, name), nil)
 }
 
-func (self *remoteServiceBackend) AddSub(bstream string, s backend.Stream, hFrom uint, hTo int) (res stream.Stream, rerr error) {
+func (self *remoteServiceBackend) AddSub(bstream string, s backend.Stream, hFrom int, hTo int) (rf uint, rt uint, rerr error) {
 	sid := nextId(&self.subId)
 
 	nf, nt, err := self.s.addSub(self.name, bstream, sid, hFrom, hTo)
 	if err != nil {
-		return nil, err
+		return 0, 0, err
 	}
 
 	self.lock.Lock()
@@ -193,12 +197,7 @@ func (self *remoteServiceBackend) AddSub(bstream string, s backend.Stream, hFrom
 	self.subs[sid] = s
 	self.lock.Unlock()
 
-	bs, err := self.back.GetStream(bstream)
-	if err != nil {
-		return nil, err
-	}
-
-	return self.getStream(bstream, bs).Read(nf, nt)
+	return nf, nt, nil
 }
 
 func (self *remoteServiceBackend) getSid(s backend.Stream) (uint32, bool) {
@@ -477,7 +476,7 @@ type addSubCmdData struct {
 	Back  string `json:"backend"`
 	Bname string `json:"stream"`
 	Sid   uint32 `json:"sid"`
-	From  uint   `json:"from"`
+	From  int    `json:"from"`
 	To    int    `json:"to"`
 }
 
@@ -488,11 +487,11 @@ type addSubCmd struct {
 
 type rangeRes struct {
 	From uint   `json:"from,omitempty"`
-	To   int    `json:"to,omitempty"`
+	To   uint   `json:"to,omitempty"`
 	Err  string `json:"error,omitempty"`
 }
 
-func (self *remoteService) addSub(back, bname string, sid uint32, hFrom uint, hTo int) (uint, int, error) {
+func (self *remoteService) addSub(back, bname string, sid uint32, hFrom int, hTo int) (uint, uint, error) {
 	cmd := addSubCmd{
 		Cmd: "subscribe",
 		Data: addSubCmdData{
