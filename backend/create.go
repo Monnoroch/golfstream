@@ -65,14 +65,14 @@ func RegisterDefault() {
 	RegisterCreator("ledis", func(arg interface{}) (Backend, error) {
 		dir, ok := arg.(string)
 		if !ok {
-			return nil, errors.New(fmt.Sprintf("ledis creator: Expected *string as arg, got %v", arg))
+			return nil, errors.New(fmt.Sprintf("ledis creator: Expected string as arg, got %v", arg))
 		}
 		return NewLedis(dir)
 	})
 	RegisterCreator("http", func(arg interface{}) (Backend, error) {
 		url, ok := arg.(string)
 		if !ok {
-			return nil, errors.New(fmt.Sprintf("http-default creator: Expected *string as arg, got %v", arg))
+			return nil, errors.New(fmt.Sprintf("http-default creator: Expected string as arg, got %v", arg))
 		}
 		return NewHttp(url, nil), nil
 	})
