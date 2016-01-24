@@ -169,6 +169,7 @@ func (self *dynBufChan) run() {
 
 // Get an implementation of Chan interface for elastic channel: the channel with infinite, dynamically growing buffer
 // with specified initial buffer sise.
+// TODO: make buffefred chennels possible. THe problem now is when isClosed is true and we do not drain the buffered add channel.
 func ChanDynBuf(buf int) Chan {
 	res := &dynBufChan{
 		queue:    make([]stream.Event, 0, buf),
