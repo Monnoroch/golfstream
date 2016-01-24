@@ -56,7 +56,7 @@ Here is a typical use case:
 			vals []io.Closer
 		}
 
-		func (self *aggregator) CLose() error {
+		func (self *aggregator) Close() error {
 			errs := errors.List().
 				Add(self.val1.Close()).
 				Add(self.val2.Close())
