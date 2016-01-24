@@ -611,10 +611,14 @@ type cmdResult struct {
 
 func (self *remoteService) run(ws *websocket.Conn) error {
 	for {
-		_, msg, err := ws.ReadMessage()
+		mt, msg, err := ws.ReadMessage()
 		if err != nil {
 			fmt.Printf("remoteService.run: %#v\n", err)
 			break
+		}
+
+		if mt != websocket.BinaryMessage {
+			continue
 		}
 
 		cmd := cmdResult{}

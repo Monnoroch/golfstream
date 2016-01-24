@@ -445,10 +445,14 @@ func handleWs(s Service, ws *websocket.Conn, subs map[uint32]*wsSub, slock *sync
 	}()
 
 	for {
-		_, msg, err := ws.ReadMessage()
+		mt, msg, err := ws.ReadMessage()
 		if err != nil {
 			fmt.Printf("ws.ReadMessage: %#v\n", err)
 			break
+		}
+
+		if mt != websocket.BinaryMessage {
+			continue
 		}
 
 		if err := iter(ch, msg, s, subs, slock); err != nil {
