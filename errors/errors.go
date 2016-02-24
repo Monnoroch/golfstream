@@ -123,7 +123,14 @@ func (self *ErrorList) Err() error {
 
 // Implementation of an error interface for error list.
 func (self *ErrorList) Error() string {
-	return fmt.Sprintf("%v", self.Err())
+	err := self.Err()
+	if err == nil {
+		return fmt.Sprintf("%v", nil)
+	}
+	if v, ok := err.(*ErrorList); ok {
+		return fmt.Sprintf("%v", v.errs)
+	}
+	return fmt.Sprintf("%v", err)
 }
 
 // Create an empty error list.
