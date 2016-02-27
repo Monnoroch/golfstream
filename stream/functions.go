@@ -559,20 +559,27 @@ func sprintf(ctx Context, args []FArg) (Stream, error) {
 	if !ok {
 		return nil, errors.New(fmt.Sprintf("sprintf: Expected args[1] to be string, got %v", args[1]))
 	}
-
+	
+	arg2ErrFmt := "sprintf: Expected args[2] to be string or []string, got %v"
+	sfield, oks := args[2].(string)
 	ifields, ok := args[2].([]interface{})
-	if !ok {
-		return nil, errors.New(fmt.Sprintf("sprintf: Expected args[2] to be []string, got %v", args[2]))
+	if !oks && !ok {
+		return nil, errors.New(fmt.Sprintf(arg2ErrFmt, args[2]))
 	}
-
-	fields := make([]string, len(ifields))
-	for i, f := range ifields {
-		sf, ok := f.(string)
-		if !ok {
-			return nil, errors.New(fmt.Sprintf("sprintf: Expected args[2] to be []string, got %v", args[2]))
+	
+	var fields []string
+	if oks {
+		fields = []string{sfield}
+	} else {
+		fields = make([]string, len(ifields))
+		for i, f := range ifields {
+			sf, ok := f.(string)
+			if !ok {
+				return nil, errors.New(fmt.Sprintf(arg2ErrFmt, args[2]))
+			}
+	
+			fields[i] = sf
 		}
-
-		fields[i] = sf
 	}
 
 	return Sprintf(proc, sfmt, fields), nil
