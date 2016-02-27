@@ -1089,12 +1089,16 @@ func Sprintf(stream Stream, sfmt string, fields []string) Stream {
 	return Map(stream, func(evt Event) (Event, error) {
 		vals := make([]interface{}, len(fields))
 		for i, f := range fields {
-			fv, ok := getFieldImpl(evt, f)
-			if !ok {
-				return nil, errors.New(fmt.Sprintf("GetField: Expected event to have field %s, got %v", f, evt))
+			if f != "" {
+				fv, ok := getFieldImpl(evt, f)
+				if !ok {
+					return nil, errors.New(fmt.Sprintf("GetField: Expected event to have field %s, got %v", f, evt))
+				}
+				
+				vals[i] = fv
+			} else {
+				vals[i] = evt
 			}
-
-			vals[i] = fv
 		}
 
 		return fmt.Sprintf(sfmt, vals...), nil
