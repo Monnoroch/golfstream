@@ -1081,3 +1081,26 @@ func Len(s Stream) (int, error) {
 	}
 	return res, nil
 }
+
+/*
+Format fields of events into string stream.
+*/
+func Sprintf(stream Stream, sfmt string, fields []string) Stream {
+	return Map(stream, func(evt Event) (Event, error) {
+		vals := make([]interface{}, len(fields))
+		for i, f := range fields {
+			if f != "" {
+				fv, ok := getFieldImpl(evt, f)
+				if !ok {
+					return nil, errors.New(fmt.Sprintf("GetField: Expected event to have field %s, got %v", f, evt))
+				}
+				
+				vals[i] = fv
+			} else {
+				vals[i] = evt
+			}
+		}
+
+		return fmt.Sprintf(sfmt, vals...), nil
+	})
+}

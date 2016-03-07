@@ -3,7 +3,6 @@ package golfstream
 
 import (
 	"github.com/Monnoroch/golfstream/backend"
-	"github.com/Monnoroch/golfstream/stream"
 )
 
 /*
@@ -25,7 +24,7 @@ type Backend interface {
 
 	// Add subscriber to a backend stream.
 	// Returns a range from history.
-	AddSub(bstream string, s backend.Stream, hFrom uint, hTo int) (stream.Stream, error)
+	AddSub(bstream string, s backend.Stream, hFrom int, hTo int) (uint, uint, error)
 	// Remove a subscriber from a backend stream.
 	// Returns true if this subscribes actually was subscribed, false otherwise.
 	RmSub(bstream string, s backend.Stream) (bool, error)

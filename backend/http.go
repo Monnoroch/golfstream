@@ -12,6 +12,7 @@ import (
 
 type httpBackendStream struct {
 	addUrl  string
+	intUrl  string
 	readUrl string
 	delUrl  string
 	lenUrl  string
@@ -51,8 +52,8 @@ type arrErrorObj struct {
 	Err    string            `json:"error,omitempty"`
 }
 
-func (self *httpBackendStream) Read(from uint, to int) (stream.Stream, error) {
-	if int(from) == to {
+func (self *httpBackendStream) Read(from uint, to uint) (stream.Stream, error) {
+	if from == to {
 		return stream.Empty(), nil
 	}
 
@@ -78,13 +79,42 @@ func (self *httpBackendStream) Read(from uint, to int) (stream.Stream, error) {
 	return stream.List(r), nil
 }
 
+type interErrorObj struct {
+	From uint   `json:"from,omitempty"`
+	To   uint   `json:"to,omitempty"`
+	Err  string `json:"error,omitempty"`
+}
+
+func (self *httpBackendStream) Interval(from int, to int) (uint, uint, error) {
+	if from == to {
+		return 0, 0, nil
+	}
+
+	resp, err := self.p.Post(fmt.Sprintf(self.intUrl, from, to), nil)
+	if err != nil {
+		return 0, 0, err
+	}
+	defer resp.Body.Close()
+
+	res := interErrorObj{}
+	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+		return 0, 0, err
+	}
+
+	if res.Err != "" {
+		return 0, 0, errors.New(res.Err)
+	}
+
+	return res.From, res.To, nil
+}
+
 type boolErrorObj struct {
 	Ok  bool   `json:"ok,omitempty"`
 	Err string `json:"error,omitempty"`
 }
 
-func (self *httpBackendStream) Del(from uint, to int) (bool, error) {
-	if int(from) == to {
+func (self *httpBackendStream) Del(from uint, to uint) (bool, error) {
+	if from == to {
 		return true, nil
 	}
 
@@ -209,6 +239,7 @@ func (self *httpBackend) GetStream(name string) (BackendStream, error) {
 		baseUrl := fmt.Sprintf(self.streamUrl, name)
 		s = &httpBackendStream{
 			fmt.Sprintf("%s/push", baseUrl),
+			fmt.Sprintf("%s/interval/%%v:%%v", baseUrl),
 			fmt.Sprintf("%s/read/%%v:%%v", baseUrl),
 			fmt.Sprintf("%s/del/%%v:%%v", baseUrl),
 			fmt.Sprintf("%s/len", baseUrl),

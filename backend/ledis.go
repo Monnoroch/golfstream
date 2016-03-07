@@ -7,7 +7,6 @@ import (
 	"github.com/siddontang/ledisdb/config"
 	"github.com/siddontang/ledisdb/ledis"
 	"log"
-	"math"
 	"os"
 	"sync"
 )
@@ -72,39 +71,51 @@ func (self *ledisStreamObj) Add(evt stream.Event) error {
 	return err
 }
 
-func (self *ledisStreamObj) Read(afrom uint, to int) (stream.Stream, error) {
-	from := int(afrom)
+func (self *ledisStreamObj) Read(from uint, to uint) (stream.Stream, error) {
 	if from == to {
 		return stream.Empty(), nil
 	}
 
 	self.delLock.RLock()
 
-	al, err := self.db.LLen(self.key)
+	l, err := self.db.LLen(self.key)
 	if err != nil {
 		return nil, err
 	}
-	l := int(al)
 
-	if to < 0 {
-		to = l + 1 + to
-	}
-	if from < 0 {
-		from = l + 1 + from
-	}
-
-	if int(from) == to {
-		return stream.Empty(), nil
-	}
-
-	if err := checkRange(int(from), int(to), int(l), "ledisStreamObj.Read"); err != nil {
+	if _, _, err := convRange(int(from), int(to), int(l), "ledisStreamObj.Read"); err != nil {
 		return nil, err
 	}
 
 	return &ledisListStream{self.db, self.key, int32(from), int32(from), int32(to), &self.delLock}, nil
 }
 
-func (self *ledisStreamObj) Del(afrom uint, ato int) (bool, error) {
+func (self *ledisStreamObj) Interval(from int, to int) (uint, uint, error) {
+	if from == to {
+		return 0, 0, nil
+	}
+
+	self.delLock.RLock()
+	defer self.delLock.RUnlock()
+
+	l, err := self.db.LLen(self.key)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	f, t, err := convRange(from, to, int(l), "ledisStreamObj.Interval")
+	if err != nil {
+		return 0, 0, err
+	}
+
+	if f == t {
+		return 0, 0, nil
+	}
+
+	return f, t, nil
+}
+
+func (self *ledisStreamObj) Del(afrom uint, ato uint) (bool, error) {
 	from := int64(afrom)
 	to := int64(ato)
 	if from == to {
@@ -114,24 +125,13 @@ func (self *ledisStreamObj) Del(afrom uint, ato int) (bool, error) {
 	self.delLock.Lock()
 	defer self.delLock.Unlock()
 
-	if from == 0 && to == -1 {
-		cnt, err := self.db.LClear(self.key)
-		if err != nil {
-			return false, err
-		}
-		return cnt != 0, nil
-	}
-
 	l, err := self.db.LLen(self.key)
 	if err != nil {
 		return false, err
 	}
 
-	if to < 0 {
-		to = l + 1 + to
-	}
-	if from < 0 {
-		from = l + 1 + from
+	if _, _, err := convRange(int(from), int(to), int(l), "ledisStreamObj.Del"); err != nil {
+		return false, err
 	}
 
 	if from == 0 && to == l {
@@ -150,10 +150,6 @@ func (self *ledisStreamObj) Del(afrom uint, ato int) (bool, error) {
 	if to == l {
 		err := self.db.LTrim(self.key, 0, from-1)
 		return err == nil, err
-	}
-
-	if err := checkRange(int(from), int(to), int(l), "ledisStreamObj.Del"); err != nil {
-		return false, err
 	}
 
 	// TODO: optimize: read smaller part to the memory
@@ -203,14 +199,25 @@ func (self *ledisBackend) Config() (interface{}, error) {
 }
 
 func (self *ledisBackend) Streams() ([]string, error) {
-	keys, err := self.db.Scan(ledis.KV, []byte{}, int(math.MaxInt32), true, "")
-	if err != nil {
-		return nil, err
+	r := make([][]byte, 0, 10)
+	lastKey := []byte{}
+	for {
+		keys, err := self.db.Scan(ledis.LIST, lastKey, 10, false, "")
+		if err != nil {
+			return nil, err
+		}
+		if len(keys) == 0 {
+			break
+		}
+
+		r = append(r, keys...)
+		lastKey = r[len(r)-1]
 	}
 
-	res := make([]string, len(keys))
-	for i, v := range keys {
+	res := make([]string, len(r))
+	for i, v := range r {
 		res[i] = string(v)
+		r[i] = nil // help GC
 	}
 	return res, nil
 }

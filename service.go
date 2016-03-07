@@ -21,12 +21,12 @@ type backendStreamT struct {
 	refcnt int
 }
 
-func (self *backendStreamT) addSub(s backend.Stream, hFrom uint, hTo int) (stream.Stream, error) {
+func (self *backendStreamT) addSub(s backend.Stream, hFrom int, hTo int) (uint, uint, error) {
 	self.lock.Lock()
 	defer self.lock.Unlock()
 
 	self.subs = append(self.subs, s)
-	return self.bs.Read(hFrom, hTo)
+	return self.bs.Interval(hFrom, hTo)
 }
 
 func (self *backendStreamT) rmSub(s backend.Stream) bool {
@@ -67,12 +67,16 @@ func (self *backendStreamT) Add(evt stream.Event) error {
 	}
 }
 
-func (self *backendStreamT) Read(from uint, to int) (stream.Stream, error) {
+func (self *backendStreamT) Read(from uint, to uint) (stream.Stream, error) {
 	return self.bs.Read(from, to)
 }
 
-func (self *backendStreamT) Del(from uint, to int) (bool, error) {
+func (self *backendStreamT) Del(from uint, to uint) (bool, error) {
 	return self.bs.Del(from, to)
+}
+
+func (self *backendStreamT) Interval(from int, to int) (uint, uint, error) {
+	return self.bs.Interval(from, to)
 }
 
 func (self *backendStreamT) Len() (uint, error) {
@@ -118,12 +122,16 @@ func (self *streamT) Add(evt stream.Event) error {
 	return self.bs.Add(res)
 }
 
-func (self *streamT) Read(from uint, to int) (stream.Stream, error) {
+func (self *streamT) Read(from uint, to uint) (stream.Stream, error) {
 	return self.bs.Read(from, to)
 }
 
-func (self *streamT) Del(from uint, to int) (bool, error) {
+func (self *streamT) Del(from uint, to uint) (bool, error) {
 	return self.bs.Del(from, to)
+}
+
+func (self *streamT) Interval(from int, to int) (uint, uint, error) {
+	return self.bs.Interval(from, to)
 }
 
 func (self *streamT) Len() (uint, error) {
@@ -257,10 +265,10 @@ func (self *serviceBackend) addSub(bstream string) (*backendStreamT, error) {
 	return bs, nil
 }
 
-func (self *serviceBackend) AddSub(bstream string, s backend.Stream, hFrom uint, hTo int) (stream.Stream, error) {
+func (self *serviceBackend) AddSub(bstream string, s backend.Stream, hFrom int, hTo int) (uint, uint, error) {
 	bs, err := self.addSub(bstream)
 	if err != nil {
-		return nil, err
+		return 0, 0, err
 	}
 
 	return bs.addSub(s, hFrom, hTo)

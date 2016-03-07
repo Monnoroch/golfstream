@@ -344,26 +344,12 @@ func subCmdHandler(s Service, data addSubCmdData, ch chan []byte, subs map[uint3
 	}()
 
 	// TODO: RmSub on failure?
-	hist, err := b.AddSub(data.Bname, sub, data.From, data.To)
+	nf, nt, err := b.AddSub(data.Bname, sub, data.From, data.To)
 	if err != nil {
 		return subResult{}, err
 	}
 
-	from := data.From
-	to := data.To
-
-	l, err := stream.Len(hist)
-	if err != nil {
-		return subResult{}, err
-	}
-
-	if from < 0 {
-		from = uint(l) + 1 + from
-	}
-	if to < 0 {
-		to = int(l) + 1 + to
-	}
-	return subResult{Id: data.Id, Data: rangeRes{From: from, To: to}}, nil
+	return subResult{Id: data.Id, Data: rangeRes{From: nf, To: nt}}, nil
 }
 
 func unsubCmdHandler(s Service, data rmSubCmdData, subs map[uint32]*wsSub, slock *sync.Mutex) (res unsubResult, rerr error) {
@@ -459,10 +445,14 @@ func handleWs(s Service, ws *websocket.Conn, subs map[uint32]*wsSub, slock *sync
 	}()
 
 	for {
-		_, msg, err := ws.ReadMessage()
+		mt, msg, err := ws.ReadMessage()
 		if err != nil {
 			fmt.Printf("ws.ReadMessage: %#v\n", err)
 			break
+		}
+
+		if mt != websocket.BinaryMessage {
+			continue
 		}
 
 		if err := iter(ch, msg, s, subs, slock); err != nil {

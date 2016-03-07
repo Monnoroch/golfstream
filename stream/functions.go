@@ -39,6 +39,7 @@ func RegisterDefault() {
 	Register("min_by_roll_all", rollingMinByAll)
 	Register("append", sappend)
 	Register("prepend", sprepend)
+	Register("sprintf", sprintf)
 }
 
 func id(ctx Context, args []FArg) (Stream, error) {
@@ -542,4 +543,44 @@ func decode(ctx Context, args []FArg) (Stream, error) {
 	}
 
 	return Decode(proc, e), nil
+}
+
+func sprintf(ctx Context, args []FArg) (Stream, error) {
+	if len(args) != 3 {
+		return nil, errors.New(fmt.Sprintf("sprintf: Expected 3 args, got %v", len(args)))
+	}
+
+	proc, err := build(ctx, args[0])
+	if err != nil {
+		return nil, err
+	}
+
+	sfmt, ok := args[1].(string)
+	if !ok {
+		return nil, errors.New(fmt.Sprintf("sprintf: Expected args[1] to be string, got %v", args[1]))
+	}
+	
+	arg2ErrFmt := "sprintf: Expected args[2] to be string or []string, got %v"
+	sfield, oks := args[2].(string)
+	ifields, ok := args[2].([]interface{})
+	if !oks && !ok {
+		return nil, errors.New(fmt.Sprintf(arg2ErrFmt, args[2]))
+	}
+	
+	var fields []string
+	if oks {
+		fields = []string{sfield}
+	} else {
+		fields = make([]string, len(ifields))
+		for i, f := range ifields {
+			sf, ok := f.(string)
+			if !ok {
+				return nil, errors.New(fmt.Sprintf(arg2ErrFmt, args[2]))
+			}
+	
+			fields[i] = sf
+		}
+	}
+
+	return Sprintf(proc, sfmt, fields), nil
 }
