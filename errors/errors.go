@@ -137,3 +137,7 @@ func (self *ErrorList) Error() string {
 func List() *ErrorList {
 	return &ErrorList{}
 }
+
+func AsList(errs ...error) *ErrorList {
+	return List().AddAll(errs)
+}
