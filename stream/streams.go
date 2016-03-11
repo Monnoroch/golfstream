@@ -12,6 +12,18 @@ import (
 
 var DebugLog = true
 
+func logPrintln(v ...interface{}) {
+	if DebugLog {
+		log.Output(3, fmt.Sprintln(v...))
+	}
+}
+
+func logPrintf(format string, v ...interface{}) {
+	if DebugLog {
+		log.Output(3, fmt.Sprintf(format, v...))
+	}
+}
+
 type emptyStream struct{}
 
 func (self emptyStream) Next() (Event, error) {
@@ -127,7 +139,7 @@ func (self *StreamMultiplexer) next(num int) (Event, error) {
 	if len(queue) > 0 {
 		res := queue[0]
 		self.queues[num] = queue[1:]
-		return res.Event, res.Err
+		return res.Event, res.Err // No need for check err == nil. We get "Event" and "Err" directly from "Next()" method
 	}
 
 	if self.end {
@@ -137,9 +149,7 @@ func (self *StreamMultiplexer) next(num int) (Event, error) {
 	res, err := self.stream.Next()
 	if err == EOI {
 		self.end = true
-		if DebugLog {
-			log.Printf("StreamMultiplexer: max len is %v\n", self.maxLen)
-		}
+		logPrintf("StreamMultiplexer: max len is %v\n", self.maxLen)
 		return nil, EOI
 	}
 
@@ -155,7 +165,7 @@ func (self *StreamMultiplexer) next(num int) (Event, error) {
 		}
 	}
 
-	return res, err
+	return res, err // res and err get directly from .Next() method. no need for check err is nil
 }
 
 type multiplexedStream struct {
@@ -182,11 +192,13 @@ func (self zipStream) Next() (Event, error) {
 		evt, err := s.Next()
 		if err == EOI {
 			if DebugLog {
+				errs := errors.List()
 				for _, data := range res {
 					if err, ok := data.(error); ok {
-						log.Println(err)
+						errs.Add(err)
 					}
 				}
+				logPrintln(errs)
 			}
 			return nil, EOI
 		}
@@ -343,6 +355,10 @@ type setFieldStream struct {
 	field string
 }
 
+// Filtering nil and searching EOI in submitted error
+// If found EOI will return EOI and logging other errors
+// If all errors is nil will return nil
+// else return ErrorList
 func getError(errs ...error) error {
 	end := false
 	for _, err := range errs {
@@ -353,11 +369,13 @@ func getError(errs ...error) error {
 	}
 	if end {
 		if DebugLog {
+			list := errors.List()
 			for _, err := range errs {
 				if err != EOI {
-					log.Println(err)
+					list.Add(err)
 				}
 			}
+			log.Println(list)
 		}
 		return EOI
 	}
@@ -505,9 +523,7 @@ func (self orStream) Next() (Event, error) {
 	for i, s := range self.streams {
 		val, err1 := s.Next()
 		if err1 == EOI {
-			if DebugLog {
-				log.Println(err)
-			}
+			logPrintln(err)
 			return nil, EOI
 		}
 		if err1 != nil {
@@ -517,7 +533,7 @@ func (self orStream) Next() (Event, error) {
 
 		bval, bok := val.(bool)
 		if !bok {
-			err.Add(errors.New(fmt.Sprintf("Or: Expected bool event, got %v in stream %d", val, i)))
+			err.Add(errors.New(fmt.Sprintf("Or: Expected bool event, got %v in stream #%d", val, i)))
 			continue
 		}
 
@@ -547,9 +563,7 @@ func (self andStream) Next() (Event, error) {
 	for i, s := range self.streams {
 		val, err1 := s.Next()
 		if err1 == EOI {
-			if DebugLog {
-				log.Println(err)
-			}
+			logPrintln(err)
 			return nil, EOI
 		}
 		if err1 != nil {
@@ -559,7 +573,7 @@ func (self andStream) Next() (Event, error) {
 
 		bval, bok := val.(bool)
 		if !bok {
-			err.Add(errors.New(fmt.Sprintf("And: Expected bool event, got %v in stream %d", val, i)))
+			err.Add(errors.New(fmt.Sprintf("And: Expected bool event, got %v in stream #%d", val, i)))
 			continue
 		}
 
@@ -628,12 +642,12 @@ func (self *maxByStream) Next() (Event, error) {
 	for {
 		data, err1 := self.datas.Next()
 		v, err2 := self.vals.Next()
-		if err1 == EOI || err2 == EOI {
-			self.done = true
-			return self.data, nil
-		}
 
 		if err := getError(err1, err2); err != nil {
+			if err == EOI {
+				self.done = true
+				return self.data, nil
+			}
 			return nil, err
 		}
 
