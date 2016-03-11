@@ -1,12 +1,28 @@
 package stream
 
 import (
-	"errors"
+	"github.com/Monnoroch/golfstream/errors"
+
 	"fmt"
+	"log"
 	"math"
 	"reflect"
 	"strings"
 )
+
+var DebugLog = true
+
+func logPrintln(v ...interface{}) {
+	if DebugLog {
+		log.Output(3, fmt.Sprintln(v...))
+	}
+}
+
+func logPrintf(format string, v ...interface{}) {
+	if DebugLog {
+		log.Output(3, fmt.Sprintf(format, v...))
+	}
+}
 
 type emptyStream struct{}
 
@@ -99,16 +115,22 @@ a buffer with all the events you have pulled, so you could pull them from the se
 
 TODO: maby we should implement single buffer for all the copies and each copy would have an index into that buffer.
 */
+
+type nextData struct {
+	Event Event
+	Err   error
+}
+
 type StreamMultiplexer struct {
 	stream Stream
-	queues [][]Event
-	err    error
+	queues [][]nextData
+	end    bool
 	maxLen int
 }
 
 // Create a stream that pulls from a base stream.
 func (self *StreamMultiplexer) New() Stream {
-	self.queues = append(self.queues, make([]Event, 0))
+	self.queues = append(self.queues, make([]nextData, 0))
 	return multiplexedStream{self, len(self.queues) - 1}
 }
 
@@ -117,24 +139,24 @@ func (self *StreamMultiplexer) next(num int) (Event, error) {
 	if len(queue) > 0 {
 		res := queue[0]
 		self.queues[num] = queue[1:]
-		return res, nil
+		return res.Event, res.Err // No need to check if err == nil. We get "Event" and "Err" directly from "Next()" method.
 	}
 
-	if self.err != nil {
-		return nil, self.err
+	if self.end {
+		return nil, EOI
 	}
 
 	res, err := self.stream.Next()
-	if err != nil {
-		self.err = err
-		fmt.Printf("StreamMultiplexer: max len is %v\n", self.maxLen)
-		return nil, err
+	if err == EOI {
+		self.end = true
+		logPrintf("StreamMultiplexer: max len is %v\n", self.maxLen)
+		return nil, EOI
 	}
 
 	if len(self.queues) > 1 {
 		for i, v := range self.queues {
 			if i != num {
-				self.queues[i] = append(v, res)
+				self.queues[i] = append(v, nextData{res, err})
 				nl := len(self.queues[i])
 				if nl > self.maxLen {
 					self.maxLen = nl
@@ -143,7 +165,7 @@ func (self *StreamMultiplexer) next(num int) (Event, error) {
 		}
 	}
 
-	return res, nil
+	return res, err // No need to check if err == nil. We get "res" and "err" directly from "Next()" method.
 }
 
 type multiplexedStream struct {
@@ -157,7 +179,7 @@ func (self multiplexedStream) Next() (Event, error) {
 
 // Create a multiplexer from a stream.
 func Multiplexer(stream Stream) *StreamMultiplexer {
-	return &StreamMultiplexer{stream, make([][]Event, 0), nil, 0}
+	return &StreamMultiplexer{stream, make([][]nextData, 0), false, 0}
 }
 
 type zipStream struct {
@@ -165,17 +187,27 @@ type zipStream struct {
 }
 
 func (self zipStream) Next() (Event, error) {
-	var res []Event = nil
+	res := make([]Event, len(self.streams))
 	for i, s := range self.streams {
 		evt, err := s.Next()
-		if err != nil {
-			return nil, err
+		if err == EOI {
+			if DebugLog {
+				errs := errors.List()
+				for _, data := range res {
+					if err, ok := data.(error); ok {
+						errs.Add(err)
+					}
+				}
+				logPrintln(errs)
+			}
+			return nil, EOI
 		}
 
-		if res == nil {
-			res = make([]Event, len(self.streams))
+		if err != nil {
+			res[i] = err
+		} else {
+			res[i] = evt
 		}
-		res[i] = evt
 	}
 	return res, nil
 }
@@ -323,14 +355,39 @@ type setFieldStream struct {
 	field string
 }
 
+// Filtering nil and searching for EOI in errors
+// If found EOI will return EOI and log non-EOI errors
+// If all errors are nil will return nil
+// otherwise will return ErrorList
+func getError(errs ...error) error {
+	end := false
+	for _, err := range errs {
+		if err == EOI {
+			end = true
+			break
+		}
+	}
+	if end {
+		if DebugLog {
+			list := errors.List()
+			for _, err := range errs {
+				if err != EOI {
+					list.Add(err)
+				}
+			}
+			log.Println(list)
+		}
+		return EOI
+	}
+	return errors.AsList(errs...).Err()
+}
+
 func (self setFieldStream) Next() (Event, error) {
 	data, err1 := self.datas.Next()
 	val, err2 := self.vals.Next()
-	if err1 != nil {
-		return nil, err1
-	}
-	if err2 != nil {
-		return nil, err2
+
+	if err := getError(err1, err2); err != nil {
+		return nil, err
 	}
 
 	if res, ok := setFieldImpl(data, self.field, val); ok {
@@ -462,29 +519,29 @@ type orStream struct {
 
 func (self orStream) Next() (Event, error) {
 	ok := false
-	var err error = nil
-	for _, s := range self.streams {
+	err := errors.List()
+	for i, s := range self.streams {
 		val, err1 := s.Next()
-		if err != nil {
-			continue
+		if err1 == EOI {
+			logPrintln(err)
+			return nil, EOI
 		}
-
 		if err1 != nil {
-			err = err1
+			err.Add(err1)
 			continue
 		}
 
 		bval, bok := val.(bool)
 		if !bok {
-			err = errors.New(fmt.Sprintf("Or: Expected bool event, got %v", val))
+			err.Add(errors.New(fmt.Sprintf("Or: Expected bool event, got %v in stream #%d", val, i)))
 			continue
 		}
 
 		ok = ok || bval
 	}
 
-	if err != nil {
-		return false, err
+	if err := err.Err(); err != nil {
+		return nil, err
 	}
 	return ok, nil
 }
@@ -502,21 +559,21 @@ type andStream struct {
 
 func (self andStream) Next() (Event, error) {
 	ok := true
-	var err error = nil
-	for _, s := range self.streams {
+	err := errors.List()
+	for i, s := range self.streams {
 		val, err1 := s.Next()
-		if err != nil {
-			continue
+		if err1 == EOI {
+			logPrintln(err)
+			return nil, EOI
 		}
-
 		if err1 != nil {
-			err = err1
+			err.Add(err1)
 			continue
 		}
 
 		bval, bok := val.(bool)
 		if !bok {
-			err = errors.New(fmt.Sprintf("And: Expected bool event, got %v", val))
+			err.Add(errors.New(fmt.Sprintf("And: Expected bool event, got %v in stream #%d", val, i)))
 			continue
 		}
 
@@ -524,7 +581,7 @@ func (self andStream) Next() (Event, error) {
 	}
 
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 	return ok, nil
 }
@@ -545,11 +602,9 @@ func (self filterStream) Next() (Event, error) {
 	for {
 		val, err1 := self.data.Next()
 		flag, err2 := self.flags.Next()
-		if err1 != nil {
-			return nil, err1
-		}
-		if err2 != nil {
-			return nil, err2
+
+		if err := getError(err1, err2); err != nil {
+			return nil, err
 		}
 
 		bflag, bok := flag.(bool)
@@ -587,16 +642,13 @@ func (self *maxByStream) Next() (Event, error) {
 	for {
 		data, err1 := self.datas.Next()
 		v, err2 := self.vals.Next()
-		if err1 == EOI && err2 == EOI {
-			self.done = true
-			break
-		}
 
-		if err1 != nil {
-			return nil, err1
-		}
-		if err2 != nil {
-			return nil, err2
+		if err := getError(err1, err2); err != nil {
+			if err == EOI {
+				self.done = true
+				return self.data, nil
+			}
+			return nil, err
 		}
 
 		val, ok := getIntOrFloat(v)
@@ -609,7 +661,6 @@ func (self *maxByStream) Next() (Event, error) {
 			self.val = val
 		}
 	}
-	return self.data, nil
 }
 
 /*
@@ -636,16 +687,13 @@ func (self *minByStream) Next() (Event, error) {
 	for {
 		data, err1 := self.datas.Next()
 		v, err2 := self.vals.Next()
-		if err1 == EOI && err2 == EOI {
-			self.done = true
-			return self.data, nil
-		}
 
-		if err1 != nil {
-			return nil, err1
-		}
-		if err2 != nil {
-			return nil, err2
+		if err := getError(err1, err2); err != nil {
+			if err == EOI {
+				self.done = true
+				return self.data, nil
+			}
+			return nil, err
 		}
 
 		val, ok := getIntOrFloat(v)
@@ -731,28 +779,16 @@ type rollingMaxByStream struct {
 	datas Stream
 	vals  Stream
 
-	val  float64
-	done bool
+	val float64
 }
 
 func (self *rollingMaxByStream) Next() (Event, error) {
-	if self.done {
-		return nil, EOI
-	}
-
 	for {
 		data, err1 := self.datas.Next()
 		v, err2 := self.vals.Next()
-		if err1 == EOI && err2 == EOI {
-			self.done = true
-			return nil, EOI
-		}
 
-		if err1 != nil {
-			return nil, err1
-		}
-		if err2 != nil {
-			return nil, err2
+		if err := getError(err1, err2); err != nil {
+			return nil, err
 		}
 
 		val, ok := getIntOrFloat(v)
@@ -771,35 +807,23 @@ func (self *rollingMaxByStream) Next() (Event, error) {
 Takes a data stream and numbers stream and produces a stream with events from the data stream for which corresponding maximal value event changes.
 */
 func RollingMaxBy(datas Stream, vals Stream) Stream {
-	return &rollingMaxByStream{datas, vals, -math.MaxFloat64, false}
+	return &rollingMaxByStream{datas, vals, -math.MaxFloat64}
 }
 
 type rollingMinByStream struct {
 	datas Stream
 	vals  Stream
 
-	val  float64
-	done bool
+	val float64
 }
 
 func (self *rollingMinByStream) Next() (Event, error) {
-	if self.done {
-		return nil, EOI
-	}
-
 	for {
 		data, err1 := self.datas.Next()
 		v, err2 := self.vals.Next()
-		if err1 == EOI && err2 == EOI {
-			self.done = true
-			return nil, EOI
-		}
 
-		if err1 != nil {
-			return nil, err1
-		}
-		if err2 != nil {
-			return nil, err2
+		if err := getError(err1, err2); err != nil {
+			return nil, err
 		}
 
 		val, ok := getIntOrFloat(v)
@@ -818,7 +842,7 @@ func (self *rollingMinByStream) Next() (Event, error) {
 Takes a data stream and numbers stream and produces a stream with events from the data stream for which corresponding minimal value event changes.
 */
 func RollingMinBy(datas Stream, vals Stream) Stream {
-	return &rollingMinByStream{datas, vals, math.MaxFloat64, false}
+	return &rollingMinByStream{datas, vals, math.MaxFloat64}
 }
 
 type rollingMaxByAllStream struct {
@@ -827,26 +851,14 @@ type rollingMaxByAllStream struct {
 
 	data Event
 	val  float64
-	done bool
 }
 
 func (self *rollingMaxByAllStream) Next() (Event, error) {
-	if self.done {
-		return nil, EOI
-	}
-
 	data, err1 := self.datas.Next()
 	v, err2 := self.vals.Next()
-	if err1 == EOI && err2 == EOI {
-		self.done = true
-		return nil, EOI
-	}
 
-	if err1 != nil {
-		return nil, err1
-	}
-	if err2 != nil {
-		return nil, err2
+	if err := getError(err1, err2); err != nil {
+		return nil, err
 	}
 
 	val, ok := getIntOrFloat(v)
@@ -866,7 +878,7 @@ func (self *rollingMaxByAllStream) Next() (Event, error) {
 Takes a data stream and numbers stream and produces a stream with events from the data stream for which the current value is maximal.
 */
 func RollingMaxByAll(datas Stream, vals Stream) Stream {
-	return &rollingMaxByAllStream{datas, vals, nil, -math.MaxFloat64, false}
+	return &rollingMaxByAllStream{datas, vals, nil, -math.MaxFloat64}
 }
 
 type rollingMinByAllStream struct {
@@ -875,26 +887,13 @@ type rollingMinByAllStream struct {
 
 	data Event
 	val  float64
-	done bool
 }
 
 func (self *rollingMinByAllStream) Next() (Event, error) {
-	if self.done {
-		return nil, EOI
-	}
-
 	data, err1 := self.datas.Next()
 	v, err2 := self.vals.Next()
-	if err1 == EOI && err2 == EOI {
-		self.done = true
-		return nil, EOI
-	}
-
-	if err1 != nil {
-		return nil, err1
-	}
-	if err2 != nil {
-		return nil, err2
+	if err := getError(err1, err2); err != nil {
+		return nil, err
 	}
 
 	val, ok := getIntOrFloat(v)
@@ -914,7 +913,7 @@ func (self *rollingMinByAllStream) Next() (Event, error) {
 Takes a data stream and numbers stream and produces a stream with events from the data stream for which the current value is minimal.
 */
 func RollingMinByAll(datas Stream, vals Stream) Stream {
-	return &rollingMinByAllStream{datas, vals, nil, math.MaxFloat64, false}
+	return &rollingMinByAllStream{datas, vals, nil, math.MaxFloat64}
 }
 
 /*
@@ -962,8 +961,6 @@ func (self *joinStream) Next() (Event, error) {
 		return self.Next()
 	}
 	if err != nil {
-		// stop all
-		self.streams = []Stream{}
 		return nil, err
 	}
 
@@ -1094,7 +1091,7 @@ func Sprintf(stream Stream, sfmt string, fields []string) Stream {
 				if !ok {
 					return nil, errors.New(fmt.Sprintf("GetField: Expected event to have field %s, got %v", f, evt))
 				}
-				
+
 				vals[i] = fv
 			} else {
 				vals[i] = evt
