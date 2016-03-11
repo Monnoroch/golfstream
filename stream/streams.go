@@ -139,7 +139,7 @@ func (self *StreamMultiplexer) next(num int) (Event, error) {
 	if len(queue) > 0 {
 		res := queue[0]
 		self.queues[num] = queue[1:]
-		return res.Event, res.Err // No need for check err == nil. We get "Event" and "Err" directly from "Next()" method
+		return res.Event, res.Err // No need to check if err == nil. We get "Event" and "Err" directly from "Next()" method.
 	}
 
 	if self.end {
@@ -165,7 +165,7 @@ func (self *StreamMultiplexer) next(num int) (Event, error) {
 		}
 	}
 
-	return res, err // res and err get directly from .Next() method. no need for check err is nil
+	return res, err // No need to check if err == nil. We get "res" and "err" directly from "Next()" method.
 }
 
 type multiplexedStream struct {
@@ -355,10 +355,10 @@ type setFieldStream struct {
 	field string
 }
 
-// Filtering nil and searching EOI in submitted error
-// If found EOI will return EOI and logging other errors
-// If all errors is nil will return nil
-// else return ErrorList
+// Filtering nil and searching for EOI in errors
+// If found EOI will return EOI and log non-EOI errors
+// If all errors are nil will return nil
+// otherwise will return ErrorList
 func getError(errs ...error) error {
 	end := false
 	for _, err := range errs {
@@ -687,12 +687,12 @@ func (self *minByStream) Next() (Event, error) {
 	for {
 		data, err1 := self.datas.Next()
 		v, err2 := self.vals.Next()
-		if err1 == EOI || err2 == EOI {
-			self.done = true
-			return self.data, nil
-		}
 
 		if err := getError(err1, err2); err != nil {
+			if err == EOI {
+				self.done = true
+				return self.data, nil
+			}
 			return nil, err
 		}
 
