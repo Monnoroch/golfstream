@@ -137,3 +137,9 @@ func (self *ErrorList) Error() string {
 func List() *ErrorList {
 	return &ErrorList{}
 }
+
+// Create an error list from errors.
+// Nil errors and other error lists are added as in Add.
+func AsList(errs ...error) *ErrorList {
+	return List().AddAll(errs)
+}
