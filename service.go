@@ -89,13 +89,30 @@ func (self *backendStreamT) Close() error {
 
 type valueStream struct {
 	evt stream.Event
+	iterDone bool
+	markerIssued bool
+	finished bool
 }
 
+func (self *valueStream) set(evt stream.Event) {
+	self.evt = evt
+	self.iterDone = false
+	self.markerIssued = false
+}
+
+var marker = errors.New("valueStream marker")
+
 func (self *valueStream) Next() (stream.Event, error) {
-	if self.evt == nil {
+	if self.finished {
 		return nil, stream.EOI
 	}
-
+	
+	if self.iterDone {
+		self.markerIssued = true
+		return nil, marker
+	}
+	
+	self.iterDone = true
 	return self.evt, nil
 }
 
@@ -108,18 +125,24 @@ type streamT struct {
 }
 
 func (self *streamT) Add(evt stream.Event) error {
-	// NOTE: Since Next is not thread-safe (has changing state), if we call Next from several goroutines
-	// we might mess up this state.
-	// So this function is not thread-safe too, despite the use of a channel.
-	// If we want to make it thread safe it's enough to put the lock around Next,
-	// no need to put Send in a critical section.
-	self.val.evt = evt
-	res, err := self.data.Next()
-	if err != nil {
-		return err
+	self.val.set(evt)
+	
+	errs := errors.List()
+	for {
+		res, err := self.data.Next()
+		if err != nil {
+			if self.val.markerIssued {
+				if err != marker { // marker was transformed
+					// TODO: log error? Not sure if we need it.
+				}
+				return errs.Err()
+			}
+			return errs.Add(err).Err()
+		}
+		if err := self.bs.Add(res); err != nil {
+			errs.Add(err)
+		}
 	}
-
-	return self.bs.Add(res)
 }
 
 func (self *streamT) Read(from uint, to uint) (stream.Stream, error) {
@@ -139,7 +162,7 @@ func (self *streamT) Len() (uint, error) {
 }
 
 func (self *streamT) Close() error {
-	self.val.evt = nil
+	self.val.finished = true
 	return nil
 }
 
@@ -191,13 +214,14 @@ func (self *serviceBackend) AddStream(bstream, name string, defs []string) (res 
 		self.bstreams[bstream] = bs
 	}
 
-	st := &valueStream{nil}
+	st := &valueStream{nil, false, false, false}
 	data, err := stream.Run(st, defs)
 	if err != nil {
 		return nil, err
 	}
 
 	s := &streamT{bs, defs, st, data}
+	st.s = s
 	self.streams[name] = s
 	bs.refcnt += 1
 	return s, nil
