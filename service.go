@@ -89,13 +89,30 @@ func (self *backendStreamT) Close() error {
 
 type valueStream struct {
 	evt stream.Event
+	iterDone bool
+	markerIssued bool
+	finished bool
 }
 
+func (self *valueStream) set(evt stream.Event) {
+	self.evt = evt
+	self.iterDone = false
+	self.markerIssued = false
+}
+
+var marker = errors.New("valueStream marker")
+
 func (self *valueStream) Next() (stream.Event, error) {
-	if self.evt == nil {
+	if self.finished {
 		return nil, stream.EOI
 	}
-
+	
+	if self.iterDone {
+		self.markerIssued = true
+		return nil, marker
+	}
+	
+	self.iterDone = true
 	return self.evt, nil
 }
 
@@ -107,19 +124,40 @@ type streamT struct {
 	data stream.Stream
 }
 
+/*
+This one is a bit tricky.
+So the general idea is that we set a new value in the valueStream object
+which then gets pulled by a function code in stream.Run()
+which then gets pulled by self.data.Next() here.
+The problem is that the function code does't return one event for each input: it can be 1:N or K:1.
+So, the first problem is that we might need to call self.data.Next() multimple times, and
+a second is that valueStream.Next() can be called several times for each self.data.Next().
+So, what we do is make the value stream return the set event once, and the second time it's called we return a marker error,
+and also set a flag, that this marker was issued. Then we call self.data.Next() in a loop until the marker was issued.
+We can not directly check if the error is the marker because function code can change the error by, for example,
+wrapping it in a errors list, so we need a flag.
+So we loop until the  marker was issued and we pull 0 or more events and add them all to self.bs,
+colecting the errors while doing it. 
+*/
 func (self *streamT) Add(evt stream.Event) error {
-	// NOTE: Since Next is not thread-safe (has changing state), if we call Next from several goroutines
-	// we might mess up this state.
-	// So this function is not thread-safe too, despite the use of a channel.
-	// If we want to make it thread safe it's enough to put the lock around Next,
-	// no need to put Send in a critical section.
-	self.val.evt = evt
-	res, err := self.data.Next()
-	if err != nil {
-		return err
+	self.val.set(evt)
+	
+	errs := errors.List()
+	for {
+		res, err := self.data.Next()
+		if err != nil {
+			if self.val.markerIssued {
+				if err != marker { // marker was transformed
+					// TODO: log error? Not sure if we need it.
+				}
+				return errs.Err()
+			}
+			return errs.Add(err).Err()
+		}
+		if err := self.bs.Add(res); err != nil {
+			errs.Add(err)
+		}
 	}
-
-	return self.bs.Add(res)
 }
 
 func (self *streamT) Read(from uint, to uint) (stream.Stream, error) {
@@ -139,7 +177,7 @@ func (self *streamT) Len() (uint, error) {
 }
 
 func (self *streamT) Close() error {
-	self.val.evt = nil
+	self.val.finished = true
 	return nil
 }
 
@@ -191,7 +229,7 @@ func (self *serviceBackend) AddStream(bstream, name string, defs []string) (res 
 		self.bstreams[bstream] = bs
 	}
 
-	st := &valueStream{nil}
+	st := &valueStream{nil, false, false, false}
 	data, err := stream.Run(st, defs)
 	if err != nil {
 		return nil, err
