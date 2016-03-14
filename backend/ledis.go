@@ -180,6 +180,7 @@ func (self *ledisStreamObj) Len() (uint, error) {
 }
 
 func (self *ledisStreamObj) Close() error {
+	self.back.release(self)
 	return nil
 }
 
