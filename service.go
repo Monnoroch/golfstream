@@ -124,6 +124,21 @@ type streamT struct {
 	data stream.Stream
 }
 
+/*
+This one is a bit tricky.
+So the general idea is that we set a new value in the valueStream object
+which then gets pulled by a function code in stream.Run()
+which then gets pulled by self.data.Next() here.
+The problem is that the function code does't return one event for each input: it can be 1:N or K:1.
+So, the first problem is that we might need to call self.data.Next() multimple times, and
+a second is that valueStream.Next() can be called several times for each self.data.Next().
+So, what we do is make the value stream return the set event once, and the second time it's called we return a marker error,
+and also set a flag, that this marker was issued. Then we call self.data.Next() in a loop until the marker was issued.
+We can not directly check if the error is the marker because function code can change the error by, for example,
+wrapping it in a errors list, so we need a flag.
+So we loop until the  marker was issued and we pull 0 or more events and add them all to self.bs,
+colecting the errors while doing it. 
+*/
 func (self *streamT) Add(evt stream.Event) error {
 	self.val.set(evt)
 	
