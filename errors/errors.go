@@ -16,7 +16,7 @@ func New(text string) error {
 // The argument skip is the number of stack frames to ascend
 func Stack(i int) string {
 	// code from "runtime/debug"
-	// if call debug.Stack() it add 2 lines to end
+	// we use ours because debug.Stack() appends two extra lines to the stacktrace
 	buf := make([]byte, 1024)
 	for {
 		n := runtime.Stack(buf, false)
