@@ -4,12 +4,44 @@ package errors
 import (
 	"errors"
 	"fmt"
-	"runtime/debug"
+	"runtime"
 )
 
 // Convenience function to call errors.New() from the standart library.
 func New(text string) error {
 	return errors.New(text)
+}
+
+// Stack returns a formatted stack trace of the goroutine that calls it.
+// The argument skip is the number of stack frames to ascend
+func Stack(i int) string {
+	// code from "runtime/debug"
+	// if call debug.Stack() it add 2 lines to end
+	buf := make([]byte, 1024)
+	for {
+		n := runtime.Stack(buf, false)
+		if n < len(buf) {
+			buf = buf[:n]
+			break
+		}
+		buf = make([]byte, 2*len(buf))
+	}
+
+	// i + 1 - self
+	// x2 - 2 line for 1 level
+	// + 1 - for "gorutine" line
+	i = (i+1)*2 + 1
+
+	k := 0
+	for j, s := range buf {
+		if s == '\n' {
+			k++
+			if k == i {
+				return string(buf[j+1:])
+			}
+		}
+	}
+	return string(buf)
 }
 
 // An exception: an error with the stack trace, similar to the exceptions in other languages like Java.
@@ -30,7 +62,7 @@ func (self ExError) Reason() error {
 
 // A function to create an exception
 func Ex(s string) ExError {
-	return ExError{errors.New(s), string(debug.Stack())}
+	return ExError{errors.New(s), Stack(1)}
 }
 
 // Convert an error to an exception.
@@ -42,7 +74,7 @@ func AsEx(err error) error {
 	if _, ok := err.(ExError); ok {
 		return err
 	}
-	return ExError{err, string(debug.Stack())}
+	return ExError{err, Stack(1)}
 }
 
 /*
