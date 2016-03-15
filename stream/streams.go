@@ -375,7 +375,9 @@ func getError(errs ...error) error {
 					list.Add(err)
 				}
 			}
-			log.Println(list)
+			if err := list.Err(); err != nil {
+				log.Println(err)
+			}
 		}
 		return EOI
 	}
