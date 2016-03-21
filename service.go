@@ -88,10 +88,10 @@ func (self *backendStreamT) Close() error {
 }
 
 type valueStream struct {
-	evt stream.Event
-	iterDone bool
+	evt          stream.Event
+	iterDone     bool
 	markerIssued bool
-	finished bool
+	finished     bool
 }
 
 func (self *valueStream) set(evt stream.Event) {
@@ -106,12 +106,12 @@ func (self *valueStream) Next() (stream.Event, error) {
 	if self.finished {
 		return nil, stream.EOI
 	}
-	
+
 	if self.iterDone {
 		self.markerIssued = true
 		return nil, marker
 	}
-	
+
 	self.iterDone = true
 	return self.evt, nil
 }
@@ -137,11 +137,11 @@ and also set a flag, that this marker was issued. Then we call self.data.Next() 
 We can not directly check if the error is the marker because function code can change the error by, for example,
 wrapping it in a errors list, so we need a flag.
 So we loop until the  marker was issued and we pull 0 or more events and add them all to self.bs,
-colecting the errors while doing it. 
+colecting the errors while doing it.
 */
 func (self *streamT) Add(evt stream.Event) error {
 	self.val.set(evt)
-	
+
 	errs := errors.List()
 	for {
 		res, err := self.data.Next()
