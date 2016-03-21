@@ -76,4 +76,11 @@ func RegisterDefault() {
 		}
 		return NewHttp(url, nil), nil
 	})
+	RegisterCreator("dir", func(arg interface{}) (Backend, error) {
+		dir, ok := arg.(string)
+		if !ok {
+			return nil, errors.New(fmt.Sprintf("dir creator: Expected string as arg, got %v", arg))
+		}
+		return NewDir(dir)
+	})
 }
