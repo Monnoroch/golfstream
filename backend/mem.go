@@ -11,9 +11,6 @@ type memStreamObj struct {
 
 	lock sync.Mutex
 	data []stream.Event
-
-	// access syncronized by backend
-	refcnt int
 }
 
 func (self *memStreamObj) Add(evt stream.Event) error {
@@ -120,10 +117,9 @@ func (self *memBackend) GetStream(name string) (BackendStream, error) {
 
 	s, ok := self.data[name]
 	if !ok {
-		s = &memStreamObj{self, name, sync.Mutex{}, []stream.Event{}, 0}
+		s = &memStreamObj{self, name, sync.Mutex{}, []stream.Event{}}
 		self.data[name] = s
 	}
-	s.refcnt += 1
 	return s, nil
 }
 
