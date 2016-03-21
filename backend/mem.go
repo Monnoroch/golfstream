@@ -43,11 +43,12 @@ func (self *memStreamObj) Interval(from int, to int) (uint, uint, error) {
 		return 0, 0, nil
 	}
 
-	self.lock.Lock()
-	l := len(self.data)
-	self.lock.Unlock()
+	l, err := self.Len()
+	if err != nil {
+		return 0, 0, err
+	}
 
-	f, t, err := convRange(from, to, l, "memStreamObj.Interval")
+	f, t, err := convRange(from, to, int(l), "memStreamObj.Interval")
 	if err != nil {
 		return 0, 0, err
 	}
